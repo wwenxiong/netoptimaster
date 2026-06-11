@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-    LayoutDashboard, 
-    Settings, 
-    Search, 
-    TrendingUp, 
+import {
+    LayoutDashboard,
+    Settings,
+    Search,
+    TrendingUp,
     TrendingDown,
-    Filter, 
-    Download, 
-    Plus, 
-    Trash2, 
-    Loader2, 
-    Calendar, 
-    Activity, 
-    Check, 
+    Filter,
+    Download,
+    Plus,
+    Trash2,
+    Loader2,
+    Calendar,
+    Activity,
+    Check,
     X,
     HelpCircle,
     ChevronDown,
@@ -32,6 +32,7 @@ import * as XLSX from 'xlsx';
 // Storage Keys
 const STORAGE_KEY_CORE_METRICS = 'NetOpti_Dashboard_CoreMetrics_v1';
 const STORAGE_KEY_DEGRADE_CONFIGS = 'NetOpti_Dashboard_DegradeConfigs_v2';
+const STORAGE_KEY_LAST_RANK_RESULTS = 'NetOpti_Dashboard_LastRankResults_v1';
 
 // Chart Color Palette
 const COLORS = [
@@ -57,7 +58,7 @@ export const DashboardPanel: React.FC = () => {
     const [granularity, setGranularity] = useState<Granularity>(Granularity.DAY);
     const [loading, setLoading] = useState(false);
     const [availableMetrics, setAvailableMetrics] = useState<string[]>([]);
-    
+
     // Core Metrics Config (for KPI cards) - load synchronously to prevent race condition on mount
     interface CoreMetricConfig {
         metric: string;
@@ -110,11 +111,16 @@ export const DashboardPanel: React.FC = () => {
                     });
                 }
             }
-        } catch {}
+        } catch { }
         return [];
     });
     const [expandedConfigIdx, setExpandedConfigIdx] = useState<number | null>(null);
-    const [rankResults, setRankResults] = useState<DegradationRankResult[]>([]);
+    const [rankResults, setRankResults] = useState<DegradationRankResult[]>(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_LAST_RANK_RESULTS);
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
     const [rankLoading, setRankLoading] = useState(false);
     const [selectedMetricFilter, setSelectedMetricFilter] = useState<string>('all');
 
@@ -167,7 +173,7 @@ export const DashboardPanel: React.FC = () => {
 
                 // Initialize core metrics default guesses if empty
                 if (coreMetrics.length === 0) {
-                    const defaultGuesses = keys.filter(k => 
+                    const defaultGuesses = keys.filter(k =>
                         k.includes('成功率') || k.includes('掉话率') || k.includes('流量') || k.includes('PRB') || k.includes('丢包率')
                     ).slice(0, 4);
                     const loadedCore = defaultGuesses.length > 0 ? defaultGuesses : keys.slice(0, 4);
@@ -196,7 +202,7 @@ export const DashboardPanel: React.FC = () => {
                             setDegradeConfigs(migrated);
                         }
                     }
-                } catch {}
+                } catch { }
 
             } catch (e) {
                 console.error("初始化监控看板失败", e);
@@ -247,19 +253,6 @@ export const DashboardPanel: React.FC = () => {
 
     useEffect(() => { fetchKPISummary(); }, [networkType, granularity, coreMetrics]);
 
-    // 监听配置或基础数据变化，自动执行劣化检测排查
-    useEffect(() => {
-        // 如果配置弹窗是打开的，说明用户可能正在密集配置，暂时不触发自动检测
-        if (isFilterConfigOpen) return;
-
-        if (degradeConfigs.length === 0) {
-            setRankResults([]);
-            return;
-        }
-
-        handleDegradeRankAnalysis();
-    }, [degradeConfigs, networkType, granularity, latestDate, isFilterConfigOpen]);
-
     const handleRefreshAll = () => {
         fetchKPISummary();
         handleDegradeRankAnalysis();
@@ -289,7 +282,6 @@ export const DashboardPanel: React.FC = () => {
             return;
         }
         setRankLoading(true);
-        setRankResults([]);
         try {
             const res = await dbService.detectDegradationRank({
                 networkType,
@@ -297,6 +289,7 @@ export const DashboardPanel: React.FC = () => {
                 metricConfigs: degradeConfigs,
             });
             setRankResults(res);
+            localStorage.setItem(STORAGE_KEY_LAST_RANK_RESULTS, JSON.stringify(res));
         } catch (e: any) {
             alert("劣化排行分析失败: " + e.message);
         } finally {
@@ -308,7 +301,7 @@ export const DashboardPanel: React.FC = () => {
     const handleTrendSearch = async (cellNameStr?: string) => {
         const targetCell = cellNameStr || cellSearch;
         if (!targetCell.trim()) { alert("请输入小区名称或CGI"); return; }
-        
+
         setTrendLoading(true);
         setTrendError(null);
         try {
@@ -376,7 +369,7 @@ export const DashboardPanel: React.FC = () => {
     // --- Excel Export ---
     const handleExportExcel = () => {
         if (filteredRankResults.length === 0) return;
-        
+
         const exportRows = filteredRankResults.map((item, idx) => {
             const row: any = {
                 "排名": idx + 1,
@@ -386,7 +379,7 @@ export const DashboardPanel: React.FC = () => {
                 "异常指标数": item.metricDetails.length,
                 "最大偏离": item.worstDeviation,
             };
-            
+
             item.metricDetails.forEach(d => {
                 row[`${d.metric} (当前值)`] = d.currentValue;
                 row[`${d.metric} (历史均值)`] = d.historyAvg;
@@ -428,7 +421,7 @@ export const DashboardPanel: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 space-y-4 p-6 overflow-y-auto custom-scrollbar">
-            
+
             {/* Top Toolbar */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -443,26 +436,26 @@ export const DashboardPanel: React.FC = () => {
 
                 <div className="flex flex-wrap items-center gap-3">
                     <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                        <button 
+                        <button
                             onClick={() => setNetworkType(NetworkType.G4)}
                             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${networkType === NetworkType.G4 ? 'bg-white text-blue-600 shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >4G LTE</button>
-                        <button 
+                        <button
                             onClick={() => setNetworkType(NetworkType.G5)}
                             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${networkType === NetworkType.G5 ? 'bg-white text-blue-600 shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >5G NR</button>
                     </div>
                     <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                        <button 
+                        <button
                             onClick={() => setGranularity(Granularity.DAY)}
                             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${granularity === Granularity.DAY ? 'bg-white text-blue-600 shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >1天粒度</button>
-                        <button 
+                        <button
                             onClick={() => setGranularity(Granularity.HOUR)}
                             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${granularity === Granularity.HOUR ? 'bg-white text-blue-600 shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >天忙时</button>
                     </div>
-                    <button 
+                    <button
                         onClick={handleRefreshAll} disabled={loading}
                         className="h-9 px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 border border-slate-300 bg-white rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
                     >
@@ -477,7 +470,7 @@ export const DashboardPanel: React.FC = () => {
                 <div className="flex justify-between items-center px-1">
                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        全网 KPI 概览 
+                        全网 KPI 概览
                         {latestDate && (
                             <span className="normal-case bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100 font-medium ml-1">
                                 最新日期: {latestDate.split('T')[0]} (包含小区数: {totalCells})
@@ -510,7 +503,7 @@ export const DashboardPanel: React.FC = () => {
                                 { bg: 'from-purple-500 to-pink-600', text: 'text-purple-600', lightBg: 'bg-purple-50 border-purple-100' },
                             ];
                             const theme = colorsMap[idx % colorsMap.length];
-                            
+
                             // Calculate change compared to previous day
                             let deltaText = '';
                             let deltaColor = 'text-slate-400';
@@ -563,7 +556,7 @@ export const DashboardPanel: React.FC = () => {
 
             {/* Bottom Panels Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                
+
                 {/* ============ LEFT PANEL: THREE-LAYER DEGRADATION RANK ============ */}
                 <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-[600px]">
                     <div className="p-4 border-b border-slate-100 bg-gradient-to-r from-red-50 to-slate-50 flex items-center justify-between">
@@ -572,7 +565,7 @@ export const DashboardPanel: React.FC = () => {
                                 <Filter className="w-4 h-4" />
                             </div>
                             <div>
-                                <h3 className="font-bold text-slate-800 text-sm">Top 劣化小区自动排行</h3>
+                                <h3 className="font-bold text-slate-800 text-sm">Top 劣化小区排行</h3>
                                 <p className="text-[10px] text-slate-400">三层过滤 · 历史对比 → 分母保护 → 连续校验</p>
                             </div>
                         </div>
@@ -593,7 +586,15 @@ export const DashboardPanel: React.FC = () => {
                             {rankLoading && <Loader2 className="w-3 h-3 text-red-500 animate-spin ml-2" />}
                         </div>
                         <div className="flex items-center gap-2">
-                            <button 
+                            <button
+                                onClick={handleDegradeRankAnalysis}
+                                disabled={rankLoading}
+                                className="px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all bg-white shadow-sm disabled:opacity-50"
+                            >
+                                {rankLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-red-500" /> : <Activity className="w-3.5 h-3.5 text-red-500" />}
+                                执行过滤
+                            </button>
+                            <button
                                 onClick={() => setIsFilterConfigOpen(true)}
                                 className="px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all bg-white shadow-sm"
                             >
@@ -616,7 +617,7 @@ export const DashboardPanel: React.FC = () => {
                                     <>
                                         <TrendingDown className="w-8 h-8 mb-2 opacity-25" />
                                         <p className="text-xs font-medium">暂无劣化数据</p>
-                                        <p className="text-[10px] opacity-75 mt-0.5">请配置监控指标后自动触发三层过滤检测</p>
+                                        <p className="text-[10px] opacity-75 mt-0.5">请配置监控指标并点击上方刷新或分析检测按钮触发</p>
                                     </>
                                 )}
                             </div>
@@ -694,7 +695,7 @@ export const DashboardPanel: React.FC = () => {
                                                     const unit = isRate ? '%' : '';
                                                     const directionIcon = detail.degradeDirection === 'drop' ? '↓' : '↑';
                                                     const directionColor = detail.degradeDirection === 'drop' ? 'text-blue-600' : 'text-red-600';
-                                                    
+
                                                     return (
                                                         <div key={detail.metric + dIdx} className="bg-white rounded-lg p-2 border border-slate-100 hover:border-slate-200 transition-colors">
                                                             <div className="flex items-center justify-between mb-1">
@@ -749,95 +750,95 @@ export const DashboardPanel: React.FC = () => {
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
 
-                    <div className="p-4 border-b border-slate-100 space-y-3">
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-                                <input type="text" placeholder="输入小区名称或 CGI..."
-                                    value={cellSearch} onChange={e => setCellSearch(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleTrendSearch()}
-                                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+                        <div className="p-4 border-b border-slate-100 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                                    <input type="text" placeholder="输入小区名称或 CGI..."
+                                        value={cellSearch} onChange={e => setCellSearch(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleTrendSearch()}
+                                        className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+                                </div>
+                                <button onClick={() => handleTrendSearch()} disabled={trendLoading || !cellSearch.trim()}
+                                    className="h-8.5 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-50">
+                                    {trendLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '查询'}
+                                </button>
                             </div>
-                            <button onClick={() => handleTrendSearch()} disabled={trendLoading || !cellSearch.trim()}
-                                className="h-8.5 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-50">
-                                {trendLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '查询'}
-                            </button>
+                            {searchHistory.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">最近查询:</span>
+                                    {searchHistory.map((cell, idx) => (
+                                        <button key={idx} onClick={() => { setCellSearch(cell); handleTrendSearch(cell); }}
+                                            className="text-[10px] bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 px-2 py-0.5 rounded border border-slate-200 transition-colors">
+                                            {cell}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                        {searchHistory.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">最近查询:</span>
-                                {searchHistory.map((cell, idx) => (
-                                    <button key={idx} onClick={() => { setCellSearch(cell); handleTrendSearch(cell); }}
-                                        className="text-[10px] bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 px-2 py-0.5 rounded border border-slate-200 transition-colors">
-                                        {cell}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
 
-                    <div className="h-[250px] p-4 flex flex-col justify-center relative min-h-0 bg-white">
-                        {trendLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/75 z-10 text-blue-500">
-                                <Loader2 className="w-8 h-8 animate-spin mb-1" />
-                                <span className="text-xs font-bold text-slate-400">拉取历史趋势...</span>
-                            </div>
-                        )}
-                        {trendError && (
-                            <div className="text-center text-xs text-red-500 bg-red-50 p-4 border border-red-100 rounded-lg">⚠️ {trendError}</div>
-                        )}
-                        {!trendError && displayedTrendData.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center text-slate-400">
-                                <Activity className="w-8 h-8 mb-2 opacity-25 text-slate-400" />
-                                <p className="text-xs font-medium">暂无趋势复盘</p>
-                                <p className="text-[10px] opacity-75 mt-0.5">请在上方搜索目标小区展示其健康度指标曲线</p>
-                            </div>
-                        ) : null}
-                        {!trendError && displayedTrendData.length > 0 && (
-                            <div className="flex-1 min-h-0 w-full flex flex-col justify-between">
-                                <div className="text-[10px] font-bold text-slate-500 flex justify-between px-1 mb-2">
-                                    <span className="text-blue-600">{selectedCell} (指标复盘)</span>
-                                    <span>近 {trendDays} 天趋势走向</span>
+                        <div className="h-[250px] p-4 flex flex-col justify-center relative min-h-0 bg-white">
+                            {trendLoading && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/75 z-10 text-blue-500">
+                                    <Loader2 className="w-8 h-8 animate-spin mb-1" />
+                                    <span className="text-xs font-bold text-slate-400">拉取历史趋势...</span>
                                 </div>
-                                <div className="flex-1 min-h-0 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={displayedTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#cbd5e1" tickMargin={6} />
-                                            <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#cbd5e1" domain={['auto', 'auto']} />
-                                            <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '11px' }}
-                                                labelStyle={{ fontWeight: 'bold', color: '#475569' }} />
-                                            <Legend verticalAlign="bottom" height={24} iconSize={10} wrapperStyle={{ fontSize: '10px' }} />
-                                            {trendMetrics.map((metric, idx) => (
-                                                <Line key={metric} type="monotone" dataKey={metric} stroke={COLORS[idx % COLORS.length]} strokeWidth={2}
-                                                    dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
-                                            ))}
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                            )}
+                            {trendError && (
+                                <div className="text-center text-xs text-red-500 bg-red-50 p-4 border border-red-100 rounded-lg">⚠️ {trendError}</div>
+                            )}
+                            {!trendError && displayedTrendData.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center text-slate-400">
+                                    <Activity className="w-8 h-8 mb-2 opacity-25 text-slate-400" />
+                                    <p className="text-xs font-medium">暂无趋势复盘</p>
+                                    <p className="text-[10px] opacity-75 mt-0.5">请在上方搜索目标小区展示其健康度指标曲线</p>
                                 </div>
-                                <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-slate-100">
-                                    <span className="text-[10px] font-bold text-slate-400 flex items-center mr-1">显示指标:</span>
-                                    {coreMetrics.map((config) => {
-                                        const metric = config.metric;
-                                        const isChecked = trendMetrics.includes(metric);
-                                        return (
-                                            <label key={metric} className={`text-[10px] border px-2 py-0.5 rounded cursor-pointer transition-colors flex items-center gap-1 ${isChecked ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                                                <input type="checkbox" checked={isChecked}
-                                                    onChange={() => setTrendMetrics(prev => isChecked ? prev.filter(m => m !== metric) : [...prev, metric])}
-                                                    className="hidden" />
-                                                {metric.split('(')[0]}
-                                            </label>
-                                        );
-                                    })}
+                            ) : null}
+                            {!trendError && displayedTrendData.length > 0 && (
+                                <div className="flex-1 min-h-0 w-full flex flex-col justify-between">
+                                    <div className="text-[10px] font-bold text-slate-500 flex justify-between px-1 mb-2">
+                                        <span className="text-blue-600">{selectedCell} (指标复盘)</span>
+                                        <span>近 {trendDays} 天趋势走向</span>
+                                    </div>
+                                    <div className="flex-1 min-h-0 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <LineChart data={displayedTrendData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#cbd5e1" tickMargin={6} />
+                                                <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} stroke="#cbd5e1" domain={['auto', 'auto']} />
+                                                <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', fontSize: '11px' }}
+                                                    labelStyle={{ fontWeight: 'bold', color: '#475569' }} />
+                                                <Legend verticalAlign="bottom" height={24} iconSize={10} wrapperStyle={{ fontSize: '10px' }} />
+                                                {trendMetrics.map((metric, idx) => (
+                                                    <Line key={metric} type="monotone" dataKey={metric} stroke={COLORS[idx % COLORS.length]} strokeWidth={2}
+                                                        dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                                                ))}
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                                        <span className="text-[10px] font-bold text-slate-400 flex items-center mr-1">显示指标:</span>
+                                        {coreMetrics.map((config) => {
+                                            const metric = config.metric;
+                                            const isChecked = trendMetrics.includes(metric);
+                                            return (
+                                                <label key={metric} className={`text-[10px] border px-2 py-0.5 rounded cursor-pointer transition-colors flex items-center gap-1 ${isChecked ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                                    <input type="checkbox" checked={isChecked}
+                                                        onChange={() => setTrendMetrics(prev => isChecked ? prev.filter(m => m !== metric) : [...prev, metric])}
+                                                        className="hidden" />
+                                                    {metric.split('(')[0]}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-                        {/* ============ MODAL: Three-Layer Degradation Filtering Configuration ============ */}
+            {/* ============ MODAL: Three-Layer Degradation Filtering Configuration ============ */}
             {isFilterConfigOpen && (
                 <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-3xl h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200">
@@ -853,11 +854,11 @@ export const DashboardPanel: React.FC = () => {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        
+
                         <div className="flex-1 overflow-y-auto p-5 bg-slate-50 custom-scrollbar space-y-4">
                             <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200">
                                 <span className="text-xs text-slate-500 font-medium">需要监控劣化情况的 KPI 指标列表</span>
-                                <button 
+                                <button
                                     onClick={() => setIsMetricPickerOpen(true)}
                                     className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg shadow-sm shadow-blue-100 transition-all"
                                 >
@@ -878,7 +879,7 @@ export const DashboardPanel: React.FC = () => {
                                         return (
                                             <div key={cfg.metric + idx} className={`border rounded-lg transition-all ${isExpanded ? 'border-blue-300 shadow bg-white' : 'border-slate-200 bg-white hover:border-slate-300 shadow-sm'}`}>
                                                 {/* Header */}
-                                                <div 
+                                                <div
                                                     className="flex items-center justify-between p-3 cursor-pointer select-none bg-slate-50/50 rounded-t-lg border-b border-slate-100"
                                                     onClick={() => setExpandedConfigIdx(isExpanded ? null : idx)}
                                                 >
@@ -894,7 +895,7 @@ export const DashboardPanel: React.FC = () => {
                                                             {cfg.degradeDirection === 'drop' ? '↓下降劣化' : '↑上升劣化'}
                                                         </span>
                                                     </div>
-                                                    <button 
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); removeConfig(idx); }}
                                                         className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors flex-shrink-0"
                                                     >
@@ -1153,8 +1154,8 @@ export const DashboardPanel: React.FC = () => {
                                         return (
                                             <div key={m}
                                                 className={`p-2.5 text-xs rounded-lg border flex items-center justify-between transition-all select-none ${isSelected ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                                <span 
-                                                    className="truncate pr-2 flex-1 cursor-pointer font-medium" 
+                                                <span
+                                                    className="truncate pr-2 flex-1 cursor-pointer font-medium"
                                                     onClick={() => toggleCoreMetric(m)}
                                                     title={m}
                                                 >
@@ -1175,7 +1176,7 @@ export const DashboardPanel: React.FC = () => {
                                                             <option value="max">最大值</option>
                                                             <option value="min">最小值</option>
                                                         </select>
-                                                        <div 
+                                                        <div
                                                             className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 cursor-pointer"
                                                             onClick={() => toggleCoreMetric(m)}
                                                         >
@@ -1183,7 +1184,7 @@ export const DashboardPanel: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div 
+                                                    <div
                                                         className="w-4 h-4 rounded-full border border-slate-300 flex-shrink-0 cursor-pointer"
                                                         onClick={() => toggleCoreMetric(m)}
                                                     ></div>

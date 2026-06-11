@@ -194,14 +194,6 @@ function App() {
                 {sidebarOpen && <span>日常监控看板</span>}
             </button>
             <button 
-                onClick={() => setCurrentView(View.IMPORT)}
-                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${currentView === View.IMPORT ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-                title="数据导入"
-            >
-                <Database className="w-5 h-5" />
-                {sidebarOpen && <span>数据导入</span>}
-            </button>
-            <button 
                 onClick={() => setCurrentView(View.QUERY)}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${currentView === View.QUERY ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                 title="指标查询"
@@ -209,7 +201,14 @@ function App() {
                 <Search className="w-5 h-5" />
                 {sidebarOpen && <span>指标查询</span>}
             </button>
-
+            <button 
+                onClick={() => setCurrentView(View.IMPORT)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${currentView === View.IMPORT ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                title="数据导入"
+            >
+                <Database className="w-5 h-5" />
+                {sidebarOpen && <span>数据导入</span>}
+            </button>
         </nav>
 
         {/* Database Info Widget */}
