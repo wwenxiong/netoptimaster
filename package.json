@@ -1,0 +1,73 @@
+{
+  "name": "netoptimaster",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:3000 && electron electron/main.cjs --dev\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:portable": "vite build && electron-builder --win portable",
+    "postinstall": "node -e \"const fs=require('fs');const src='node_modules/sql.js/dist/sql-wasm.wasm';const dst='public/sql-wasm.wasm';if(fs.existsSync(src)){fs.mkdirSync('public',{recursive:true});fs.copyFileSync(src,dst);console.log('Copied sql-wasm.wasm to public/')}\""
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "lucide-react": "0.344.0",
+    "recharts": "2.12.0",
+    "sql.js": "^1.8.0",
+    "papaparse": "^5.4.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/papaparse": "^5.3.15",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
+    "electron": "^35.1.2",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.netoptimaster.app",
+    "productName": "NetOptiMaster",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "public/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "NetOptiMaster"
+    },
+    "portable": {
+      "artifactName": "NetOptiMaster-${version}-Portable.${ext}"
+    }
+  }
+}

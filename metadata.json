@@ -1,0 +1,5 @@
+{
+  "name": "NetOptiMaster - Network Optimization Tool",
+  "description": "专业的通信网络优化工具，用于备份和查询 4G/5G 指标。支持自动粒度识别、批量模糊/精确搜索，以及带导出功能的高级数据表格视图。",
+  "requestFramePermissions": []
+}
