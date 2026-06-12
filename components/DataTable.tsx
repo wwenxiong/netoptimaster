@@ -277,7 +277,14 @@ export const DataTable: React.FC<DataTableProps> = ({ data }) => {
                         }
                     }
 
-                    const val = formatCellValue(col, row[col]);
+                    let rawVal = row[col];
+                    if (rawVal === undefined || rawVal === null) {
+                      // 时间列 Fallback 兼容，处理手动导入与 SFTP 自动导入时间字段名不一致的问题
+                      if (col === 'StartTime' || col === '开始时间' || col === 'Time' || col === '时间') {
+                        rawVal = row['StartTime'] ?? row['开始时间'] ?? row['Time'] ?? row['时间'];
+                      }
+                    }
+                    const val = formatCellValue(col, rawVal);
                     const cellStyle = getCellStyle(col, val);
 
                     return (
