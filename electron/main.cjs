@@ -257,6 +257,10 @@ function downloadFilePromise(downloadUrl) {
     });
 }
 
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
+
 ipcMain.handle('check-update', async (event, { updateUrl }) => {
     try {
         let remoteInfo;

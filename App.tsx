@@ -29,6 +29,7 @@ function App() {
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{ currentVersion: string; latestVersion: string; notes: string; url: string; } | null>(null);
   const [hasUpdateRedDot, setHasUpdateRedDot] = useState(false);
+  const [appVersion, setAppVersion] = useState('1.0.0');
 
   const handleCheckUpdate = async (autoShow = false) => {
       if (!(window as any).electronAPI) return;
@@ -68,6 +69,12 @@ function App() {
   useEffect(() => {
       // Check initial state with a safety timeout
       let mounted = true;
+      
+      if ((window as any).electronAPI?.getAppVersion) {
+          (window as any).electronAPI.getAppVersion().then((v: string) => {
+              if (mounted) setAppVersion(v);
+          });
+      }
       
       const initTimeout = setTimeout(() => {
           if (mounted && !isReady && !initError) {
@@ -289,7 +296,7 @@ function App() {
                 {sidebarOpen ? (
                     <div className="flex items-center justify-between text-[11px] text-slate-400">
                         <div className="flex items-center gap-1.5 font-mono">
-                            <span>系统版本: v1.0.0</span>
+                            <span>系统版本: v{appVersion}</span>
                             {hasUpdateRedDot && (
                                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                             )}
