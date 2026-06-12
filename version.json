@@ -1,6 +1,6 @@
 {
   "version": "1.0.2",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.2/NetOptiMaster%20Setup%201.0.2.exe",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.2/NetOptiMaster.Setup.1.0.2.exe",
   "notes": "1. 兼容手动导入与 SFTP 自动同步时间列命名不一致（如 StartTime 与 开始时间）的问题；\n2. 修复不同数据源合并展示时，时间列数据可能缺失并显示为空白的问题。",
   "pubDate": "2026-06-12T10:32:00.000Z"
 }
