@@ -418,9 +418,19 @@ class DBService {
           sql += conditions.join(" OR ");
           sql += ")";
       }
-      sql += " ORDER BY timestamp ASC LIMIT 5000";
+      
+      if (params.busyHourMetric) {
+          sql += " ORDER BY timestamp ASC LIMIT 100000";
+      } else {
+          sql += " ORDER BY timestamp ASC LIMIT 5000";
+      }
 
-      return this.postToWorker('QUERY', { sql, args });
+      return this.postToWorker('QUERY', { 
+          sql, 
+          args,
+          busyHourMetric: params.busyHourMetric,
+          busyHourType: params.busyHourType
+      });
   }
 
 

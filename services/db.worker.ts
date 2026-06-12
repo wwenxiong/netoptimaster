@@ -273,7 +273,7 @@ self.onmessage = async function (e: MessageEvent) {
                 if (!db) throw new Error("DB not initialized");
                 const stmt = db.prepare(payload.sql);
                 stmt.bind(payload.args);
-                const results: any[] = [];
+                let results: any[] = [];
                 while (stmt.step()) {
                     const row = stmt.getAsObject();
                     const nt = (row.networkType || '') as string;
@@ -291,6 +291,50 @@ self.onmessage = async function (e: MessageEvent) {
                     });
                 }
                 stmt.free();
+
+                // 忙时过滤处理 (Busy Hour filtering)
+                if (payload.busyHourMetric && payload.busyHourType) {
+                    const metric = payload.busyHourMetric;
+                    const isMax = payload.busyHourType === 'max';
+                    
+                    // Group by cell (cgi or cellName) and day
+                    const groups: Record<string, any[]> = {};
+                    for (const row of results) {
+                        const dateStr = (row.timestamp || '').split('T')[0];
+                        const cellKey = `${row.cgi || row.cellName}_${dateStr}`;
+                        if (!groups[cellKey]) {
+                            groups[cellKey] = [];
+                        }
+                        groups[cellKey].push(row);
+                    }
+
+                    const filteredResults: any[] = [];
+                    for (const key in groups) {
+                        const rows = groups[key];
+                        let selectedRow = rows[0];
+                        let bestVal = parseNumericString(selectedRow[metric]);
+
+                        for (let i = 1; i < rows.length; i++) {
+                            const row = rows[i];
+                            const val = parseNumericString(row[metric]);
+                            if (isNaN(val)) continue;
+                            if (isNaN(bestVal)) {
+                                bestVal = val;
+                                selectedRow = row;
+                            } else {
+                                if (isMax ? val > bestVal : val < bestVal) {
+                                    bestVal = val;
+                                    selectedRow = row;
+                                }
+                            }
+                        }
+                        filteredResults.push(selectedRow);
+                    }
+                    // Sort the final results by timestamp ASC and limit to 5000
+                    filteredResults.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+                    results = filteredResults.slice(0, 5000);
+                }
+
                 self.postMessage({ id, status: 'success', data: results });
                 break;
             }

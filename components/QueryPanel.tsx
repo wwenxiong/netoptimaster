@@ -64,6 +64,12 @@ export const QueryPanel: React.FC = () => {
       totalCount: 0, minTime: null, maxTime: null
   });
 
+  // Busy Hour Query States
+  const [isBusyHourQuery, setIsBusyHourQuery] = useState(false);
+  const [busyHourMetric, setBusyHourMetric] = useState('');
+  const [busyHourType, setBusyHourType] = useState<'max' | 'min'>('max');
+  const [availableKeys, setAvailableKeys] = useState<string[]>([]);
+
   // Persistence Effects
   useEffect(() => { localStorage.setItem(STORAGE_KEY_MODE, mode); }, [mode]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_RAW, JSON.stringify(rawParams)); }, [rawParams]);
@@ -71,12 +77,26 @@ export const QueryPanel: React.FC = () => {
 
   useEffect(() => {
       fetchStats();
+      fetchKeys();
   }, []);
+
+  const fetchKeys = async () => {
+      try {
+          const keys = await dbService.getAvailableKeys();
+          setAvailableKeys(keys);
+          if (keys.length > 0) {
+              setBusyHourMetric(prev => keys.includes(prev) ? prev : keys[0]);
+          }
+      } catch (e) {
+          console.error("Failed to fetch available keys", e);
+      }
+  };
 
   const fetchStats = async () => {
       try {
           const stats = await dbService.getStats();
           if (stats) setDbStats(stats);
+          fetchKeys();
       } catch (e) {
           console.error("Failed to fetch stats", e);
       }
@@ -123,6 +143,8 @@ export const QueryPanel: React.FC = () => {
         startDate: startQuery,
         endDate: endQuery,
         searchTokens: tokens,
+        busyHourMetric: (currentParams.granularity === Granularity.HOUR && isBusyHourQuery) ? busyHourMetric : undefined,
+        busyHourType: (currentParams.granularity === Granularity.HOUR && isBusyHourQuery) ? busyHourType : undefined,
       });
 
       setResults(data);
@@ -235,6 +257,62 @@ export const QueryPanel: React.FC = () => {
             )}
 
         </div>
+
+        {/* NEW: Busy Hour Options for Hourly Granularity */}
+        {activeParams.granularity === Granularity.HOUR && (
+            <div className="flex flex-wrap items-center gap-4 p-3 bg-blue-50/50 rounded-lg border border-blue-100/60 text-slate-700">
+                <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        checked={isBusyHourQuery}
+                        onChange={e => setIsBusyHourQuery(e.target.checked)}
+                    />
+                    <span>按忙时查询</span>
+                </label>
+                
+                {isBusyHourQuery && (
+                    <div className="flex flex-wrap items-center gap-4 border-l border-slate-200 pl-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-semibold uppercase">忙时判定指标:</span>
+                            <select
+                                className="border border-slate-300 rounded p-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white max-w-xs"
+                                value={busyHourMetric}
+                                onChange={e => setBusyHourMetric(e.target.value)}
+                            >
+                                {availableKeys.length > 0 ? (
+                                    availableKeys.map(k => (
+                                        <option key={k} value={k}>{k}</option>
+                                    ))
+                                ) : (
+                                    <option value="">暂无可用指标</option>
+                                )}
+                            </select>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-semibold uppercase">忙时取值:</span>
+                            <div className="flex bg-slate-200 p-0.5 rounded text-xs font-bold">
+                                <button
+                                    type="button"
+                                    onClick={() => setBusyHourType('max')}
+                                    className={`px-2 py-1.5 rounded transition-all ${busyHourType === 'max' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                                >
+                                    最大值
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBusyHourType('min')}
+                                    className={`px-2 py-1.5 rounded transition-all ${busyHourType === 'min' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+                                >
+                                    最小值
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
 
         {/* BOTTOM ROW: Search & Action */}
         <div className="flex gap-4 items-end pt-2 border-t border-slate-100">

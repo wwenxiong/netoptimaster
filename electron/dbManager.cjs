@@ -408,7 +408,7 @@ function handleRequest(action, payload, sendProgress) {
             const stmt = db.prepare(payload.sql);
             const rawRows = stmt.all(payload.args);
             
-            const results = [];
+            let results = [];
             for (const row of rawRows) {
                 const nt = row.networkType || '';
                 const gran = row.granularity || '';
@@ -424,6 +424,50 @@ function handleRequest(action, payload, sendProgress) {
                     timestamp: row.timestamp
                 });
             }
+
+            // 忙时过滤处理 (Busy Hour filtering)
+            if (payload.busyHourMetric && payload.busyHourType) {
+                const metric = payload.busyHourMetric;
+                const isMax = payload.busyHourType === 'max';
+                
+                // Group by cell and day
+                const groups = {};
+                for (const row of results) {
+                    const dateStr = (row.timestamp || '').split('T')[0];
+                    const cellKey = `${row.cgi || row.cellName}_${dateStr}`;
+                    if (!groups[cellKey]) {
+                        groups[cellKey] = [];
+                    }
+                    groups[cellKey].push(row);
+                }
+
+                const filteredResults = [];
+                for (const key in groups) {
+                    const rows = groups[key];
+                    let selectedRow = rows[0];
+                    let bestVal = parseNumericString(selectedRow[metric]);
+
+                    for (let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        const val = parseNumericString(row[metric]);
+                        if (isNaN(val)) continue;
+                        if (isNaN(bestVal)) {
+                            bestVal = val;
+                            selectedRow = row;
+                        } else {
+                            if (isMax ? val > bestVal : val < bestVal) {
+                                bestVal = val;
+                                selectedRow = row;
+                            }
+                        }
+                    }
+                    filteredResults.push(selectedRow);
+                }
+                // Sort the final results by timestamp ASC and limit to 5000
+                filteredResults.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+                results = filteredResults.slice(0, 5000);
+            }
+
             return results;
         }
 
