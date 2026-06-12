@@ -1,6 +1,6 @@
 {
-  "version": "1.0.3",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.3/NetOptiMaster.Setup.1.0.3.exe",
-  "notes": "1. 完美解决手动与 SFTP 自动导入时间列缺失并显示为空白的问题；\n2. 前端表格中将所有不同格式的时间列（StartTime, 开始时间, Time等）自动归一化为统一的“开始时间”列，并提供系统物理层面的终极 Fallback 容错，确保永远能够正确对齐并展示时间。",
-  "pubDate": "2026-06-12T11:08:00.000Z"
+  "version": "1.0.4",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.4/NetOptiMaster.Setup.1.0.4.exe",
+  "notes": "1. 进一步优化并兼容不同数据源时间列（StartTime, 开始时间, Time等）因大小写不同或首尾含有空格引起的重复、错列与显示为空白问题；\n2. 增强了核心维度列（如 CellName, CGI 等）的健壮映射，确保合并展示时永远对齐。",
+  "pubDate": "2026-06-12T11:22:00.000Z"
 }
