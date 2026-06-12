@@ -42,6 +42,13 @@
   "build": {
     "appId": "com.netoptimaster.app",
     "productName": "NetOptiMaster",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "wwenxiong",
+        "repo": "netoptimaster"
+      }
+    ],
     "directories": {
       "output": "release"
     },
