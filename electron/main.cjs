@@ -68,6 +68,14 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
 
+  // 生产环境下监听 F12 打开开发者工具，方便调试排查
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });

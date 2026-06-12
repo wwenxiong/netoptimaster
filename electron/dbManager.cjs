@@ -166,23 +166,23 @@ function normalizeDate(input) {
 }
 
 function encodeRawData(raw, headers) {
-    const arr = headers.map(h => raw[h] === undefined ? null : raw[h]);
-    return JSON.stringify(arr);
+    return JSON.stringify(raw);
 }
 
 function decodeRawData(rawDataStr, headers) {
     try {
-        const arr = JSON.parse(rawDataStr);
-        if (!Array.isArray(arr)) {
-            return arr; 
+        const obj = JSON.parse(rawDataStr);
+        if (!Array.isArray(obj)) {
+            return obj || {};
         }
-        const obj = {};
+        // 兼容处理老格式（历史位置数组）
+        const restored = {};
         for (let i = 0; i < headers.length; i++) {
-            if (i < arr.length) {
-                obj[headers[i]] = arr[i];
+            if (i < obj.length) {
+                restored[headers[i]] = obj[i];
             }
         }
-        return obj;
+        return restored;
     } catch (e) {
         try {
             return JSON.parse(rawDataStr);

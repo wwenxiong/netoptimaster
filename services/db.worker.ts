@@ -189,24 +189,24 @@ function saveHeaders(networkType: string, granularity: string, headers: string[]
 
 // Encode row object to array JSON string
 function encodeRawData(raw: Record<string, any>, headers: string[]): string {
-    const arr = headers.map(h => raw[h] === undefined ? null : raw[h]);
-    return JSON.stringify(arr);
+    return JSON.stringify(raw);
 }
 
 // Decode array JSON string back to row object (seamless fallback for old formats)
 function decodeRawData(rawDataStr: string, headers: string[]): Record<string, any> {
     try {
-        const arr = JSON.parse(rawDataStr);
-        if (!Array.isArray(arr)) {
-            return arr; // If it is an old JSON object, return directly
+        const obj = JSON.parse(rawDataStr);
+        if (!Array.isArray(obj)) {
+            return obj || {}; // If it is a new JSON object, return directly
         }
-        const obj: Record<string, any> = {};
+        // Fallback compatibility logic for old "array index" databases
+        const restored: Record<string, any> = {};
         for (let i = 0; i < headers.length; i++) {
-            if (i < arr.length) {
-                obj[headers[i]] = arr[i];
+            if (i < obj.length) {
+                restored[headers[i]] = obj[i];
             }
         }
-        return obj;
+        return restored;
     } catch (e) {
         try {
             return JSON.parse(rawDataStr);
