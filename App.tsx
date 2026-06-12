@@ -34,26 +34,33 @@ function App() {
       if (!(window as any).electronAPI) return;
       try {
           const res = await (window as any).electronAPI.checkUpdate();
-          if (res && res.success && res.hasUpdate) {
-              setUpdateInfo({
-                  currentVersion: res.currentVersion,
-                  latestVersion: res.latestVersion,
-                  notes: res.notes,
-                  url: res.url
-              });
-              setHasUpdateRedDot(true);
-              if (!autoShow) {
-                  setUpdateModalOpen(true);
+          if (res && res.success) {
+              if (res.hasUpdate) {
+                  setUpdateInfo({
+                      currentVersion: res.currentVersion,
+                      latestVersion: res.latestVersion,
+                      notes: res.notes,
+                      url: res.url
+                  });
+                  setHasUpdateRedDot(true);
+                  if (!autoShow) {
+                      setUpdateModalOpen(true);
+                  }
+              } else {
+                  setHasUpdateRedDot(false);
+                  if (!autoShow) {
+                      alert(`当前已经是最新版本 (v${res.currentVersion})。`);
+                  }
               }
           } else {
               setHasUpdateRedDot(false);
               if (!autoShow) {
-                  alert(`当前已经是最新版本 (v${res?.currentVersion || '1.0.0'})。`);
+                  alert(`检查更新失败: ${res?.message || '未知网络错误'}`);
               }
           }
       } catch (err: any) {
           if (!autoShow) {
-              alert(`检查更新失败: ${err.message}`);
+              alert(`检查更新异常: ${err.message}`);
           }
       }
   };

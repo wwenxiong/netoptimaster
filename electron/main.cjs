@@ -174,7 +174,9 @@ ipcMain.handle('db-request', async (event, { action, payload }) => {
 // 4. Online Update Configuration & IPC Handlers
 const VERSION_URLS = [
     'https://raw.githubusercontent.com/wwenxiong/netoptimaster/main/version.json',
-    'https://raw.gitmirror.com/wwenxiong/netoptimaster/main/version.json'
+    'https://raw.gitmirror.com/wwenxiong/netoptimaster/main/version.json',
+    'https://cdn.jsdelivr.net/gh/wwenxiong/netoptimaster@main/version.json',
+    'https://jsd.onmicrosoft.cn/gh/wwenxiong/netoptimaster@main/version.json'
 ];
 
 const GH_DOWNLOAD_MIRRORS = [
@@ -261,7 +263,17 @@ ipcMain.handle('check-update', async (event, { updateUrl }) => {
         if (updateUrl) {
             remoteInfo = await getRemoteJson(updateUrl);
         } else {
-            remoteInfo = await getRemoteJsonWithFallback();
+            try {
+                remoteInfo = await getRemoteJsonWithFallback();
+            } catch (fallbackErr) {
+                // 如果是开发模式下，且请求 GitHub 失败，自动回退到本地 Vite 端口进行回退测试
+                if (isDev) {
+                    console.log("[Updater] GitHub connection failed in dev mode, falling back to localhost for local testing...");
+                    remoteInfo = await getRemoteJson('http://localhost:3000/version.json');
+                } else {
+                    throw fallbackErr;
+                }
+            }
         }
         
         const currentVersion = app.getVersion();
