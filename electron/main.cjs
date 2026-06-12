@@ -1,10 +1,12 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
+const dbManager = require('./dbManager.cjs');
 
 const isDev = process.argv.includes('--dev');
+let mainWindow = null;
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1024,
@@ -15,37 +17,96 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      // Allow file system access API to work properly
       sandbox: false,
     },
-    backgroundColor: '#0f172a', // slate-900, matches app background
-    show: false, // Prevent flicker
+    backgroundColor: '#0f172a',
+    show: false,
   });
 
-  // Remove default menu bar for a cleaner desktop app look
   Menu.setApplicationMenu(null);
 
-  // Show window when ready to prevent white flash
-  win.once('ready-to-show', () => {
-    win.show();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
   if (isDev) {
-    win.loadURL('http://localhost:3000');
-    win.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
-  // Handle new window requests (e.g., target="_blank" links)
-  win.webContents.setWindowOpenHandler(() => {
+  mainWindow.webContents.setWindowOpenHandler(() => {
     return { action: 'deny' };
   });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
+
+// --- IPC Handles for Native Database ---
+
+// 1. Native Database File Picker
+ipcMain.handle('select-database-file', async (event, { action }) => {
+    if (!mainWindow) return null;
+    
+    if (action === 'new') {
+        const res = await dialog.showSaveDialog(mainWindow, {
+            title: '新建本地网络指标数据库文件',
+            defaultPath: path.join(app.getPath('documents'), `Network_Metrics_${new Date().toISOString().slice(0,10)}.sqlite`),
+            filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }]
+        });
+        
+        if (!res.canceled && res.filePath) {
+            try {
+                dbManager.connect(res.filePath);
+                return { filePath: res.filePath, fileName: path.basename(res.filePath) };
+            } catch (err) {
+                throw new Error(`创建本地数据库失败: ${err.message}`);
+            }
+        }
+    } else {
+        const res = await dialog.showOpenDialog(mainWindow, {
+            title: '打开本地网络指标数据库文件',
+            properties: ['openFile'],
+            filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }]
+        });
+        
+        if (!res.canceled && res.filePaths && res.filePaths.length > 0) {
+            const filePath = res.filePaths[0];
+            try {
+                dbManager.connect(filePath);
+                return { filePath, fileName: path.basename(filePath) };
+            } catch (err) {
+                throw new Error(`打开本地数据库失败: ${err.message}`);
+            }
+        }
+    }
+    return null;
+});
+
+// 2. High-Performance Native Database Query & Operation Router
+ipcMain.handle('db-request', async (event, { action, payload }) => {
+    const sendProgress = (pct, msg) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('db-progress', { progress: pct, message: msg });
+        }
+    };
+    
+    try {
+        const result = await dbManager.handleRequest(action, payload, sendProgress);
+        return result;
+    } catch (err) {
+        console.error(`[IPC DB Error] Action: ${action}, Error:`, err);
+        throw new Error(err.message);
+    }
+});
 
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
+  dbManager.close();
   app.quit();
 });
 

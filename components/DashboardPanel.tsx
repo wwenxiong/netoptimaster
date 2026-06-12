@@ -90,6 +90,7 @@ export const DashboardPanel: React.FC = () => {
     // Dashboard KPI Data
     const [latestDate, setLatestDate] = useState<string | null>(null);
     const [totalCells, setTotalCells] = useState(0);
+    const [prevTotalCells, setPrevTotalCells] = useState(0);
     const [kpiValues, setKpiValues] = useState<Record<string, number>>({});
 
     // --- THREE-LAYER DEGRADATION RANK STATE ---
@@ -242,6 +243,7 @@ export const DashboardPanel: React.FC = () => {
             setLatestDate(res.latestDate);
             setPrevDate(res.prevDate);
             setTotalCells(res.totalCells);
+            setPrevTotalCells(res.prevTotalCells || 0);
             setKpiValues(res.kpiValues);
             setPrevKpiValues(res.prevKpiValues || {});
         } catch (e) {
@@ -398,6 +400,55 @@ export const DashboardPanel: React.FC = () => {
         XLSX.writeFile(workbook, `Top劣化小区排行_三层过滤_${dateStr}.xlsx`);
     };
 
+    // --- Export Cell Changes ---
+    const handleExportCellChanges = async () => {
+        if (!latestDate) return;
+        setLoading(true);
+        try {
+            const res = await dbService.getCellChanges({
+                networkType,
+                granularity,
+                latestDate,
+                prevDate
+            });
+
+            const exportRows: any[] = [];
+
+            res.added.forEach(item => {
+                exportRows.push({
+                    "CGI / ID": item.cgi,
+                    "小区名称": item.cellName,
+                    "变化类型": "新增",
+                    "变动时间": latestDate.split('T')[0]
+                });
+            });
+
+            res.removed.forEach(item => {
+                exportRows.push({
+                    "CGI / ID": item.cgi,
+                    "小区名称": item.cellName,
+                    "变化类型": "减少 (退网/缺失)",
+                    "变动时间": latestDate.split('T')[0]
+                });
+            });
+
+            if (exportRows.length === 0) {
+                alert("对比前一日，小区数量及明细无变化。");
+                return;
+            }
+
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.json_to_sheet(exportRows);
+            XLSX.utils.book_append_sheet(workbook, worksheet, "小区变动明细");
+            const dateStr = latestDate.split('T')[0];
+            XLSX.writeFile(workbook, `小区变动明细_${networkType}_${dateStr}.xlsx`);
+        } catch (e: any) {
+            alert("导出小区变动明细失败: " + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Severity helpers
     const getSeverityInfo = (deviation: number, deviationType: string) => {
         const val = Math.abs(deviation);
@@ -468,13 +519,22 @@ export const DashboardPanel: React.FC = () => {
             {/* KPI Summary Cards */}
             <div className="space-y-2">
                 <div className="flex justify-between items-center px-1">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         全网 KPI 概览
                         {latestDate && (
                             <span className="normal-case bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100 font-medium ml-1">
-                                最新日期: {latestDate.split('T')[0]} (包含小区数: {totalCells})
+                                最新日期: {latestDate.split('T')[0]} (包含小区数: {totalCells}{prevDate && ` / 前一日: ${prevTotalCells}`})
                             </span>
+                        )}
+                        {latestDate && prevDate && (
+                            <button
+                                onClick={handleExportCellChanges}
+                                disabled={loading}
+                                className="normal-case text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 ml-2 px-2 py-0.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 disabled:opacity-50"
+                            >
+                                <Download className="w-3 h-3" /> 导出小区变动明细
+                            </button>
                         )}
                     </span>
                     <button onClick={() => setIsConfigOpen(true)} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1">

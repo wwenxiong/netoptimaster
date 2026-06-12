@@ -1054,6 +1054,55 @@ self.onmessage = async function (e: MessageEvent) {
                 break;
             }
 
+            case 'GET_CELL_CHANGES': {
+                if (!db) throw new Error("DB not initialized");
+                const { networkType, granularity, latestDate, prevDate } = payload as {
+                    networkType: string;
+                    granularity: string;
+                    latestDate: string;
+                    prevDate: string;
+                };
+                const table = granularity === '1天' ? 'metrics_day' : 'metrics_hour';
+
+                const stmt1 = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
+                stmt1.bind([networkType, granularity, latestDate]);
+                const cellsLatest = new Map<string, string>();
+                while (stmt1.step()) {
+                    const row = stmt1.getAsObject();
+                    cellsLatest.set(row.cgi as string, row.cellName as string);
+                }
+                stmt1.free();
+
+                const added: Array<{ cgi: string; cellName: string; changeType: string }> = [];
+                const removed: Array<{ cgi: string; cellName: string; changeType: string }> = [];
+
+                if (prevDate) {
+                    const stmt2 = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
+                    stmt2.bind([networkType, granularity, prevDate]);
+                    const cellsPrev = new Map<string, string>();
+                    while (stmt2.step()) {
+                        const row = stmt2.getAsObject();
+                        cellsPrev.set(row.cgi as string, row.cellName as string);
+                    }
+                    stmt2.free();
+
+                    cellsLatest.forEach((cellName, cgi) => {
+                        if (!cellsPrev.has(cgi)) {
+                            added.push({ cgi, cellName, changeType: '新增' });
+                        }
+                    });
+
+                    cellsPrev.forEach((cellName, cgi) => {
+                        if (!cellsLatest.has(cgi)) {
+                            removed.push({ cgi, cellName, changeType: '减少' });
+                        }
+                    });
+                }
+
+                self.postMessage({ id, status: 'success', data: { added, removed } });
+                break;
+            }
+
             case 'GET_CELL_TREND': {
                 if (!db) throw new Error("DB not initialized");
                 const { networkType, granularity, cellName } = payload;

@@ -33,6 +33,22 @@ class DBService {
   }
 
   private async initWorker() {
+      if ((window as any).electronAPI) {
+          const lastPath = localStorage.getItem('NetOpti_Last_DB_Path');
+          if (lastPath) {
+              try {
+                  await (window as any).electronAPI.sendDBRequest('CONNECT_DB', { filePath: lastPath });
+                  this.currentFileName = lastPath.split(/[\\/]/).pop() || '';
+                  this.fileHandle = { isElectron: true, path: lastPath };
+                  console.log("[DBService] Native auto connect success:", lastPath);
+              } catch (e) {
+                  console.warn("[DBService] Native auto connect failed:", e);
+                  localStorage.removeItem('NetOpti_Last_DB_Path');
+              }
+          }
+          return;
+      }
+
       if (this.worker) return;
       
       // Use Vite's bundle-ready Worker loader to support environment constraints
@@ -151,6 +167,15 @@ class DBService {
   async clearFileHandle() {
       this.fileHandle = null;
       this.currentFileName = null;
+      localStorage.removeItem('NetOpti_Last_DB_Path');
+      if ((window as any).electronAPI) {
+          try {
+              await (window as any).electronAPI.sendDBRequest('CLOSE_DB', {});
+          } catch (e) {
+              console.warn("Failed to close DB in Electron", e);
+          }
+          return;
+      }
       try {
           const idb = await this.getIDB();
           const tx = idb.transaction(HANDLE_STORE_NAME, 'readwrite');
@@ -191,6 +216,14 @@ class DBService {
       transferables: Transferable[] = [],
       timeoutMs: number = 30000
   ): Promise<any> {
+      if ((window as any).electronAPI) {
+          if (onProgress) {
+              (window as any).electronAPI.onDBProgress((data: any) => {
+                  onProgress(data.progress, data.message);
+              });
+          }
+          return (window as any).electronAPI.sendDBRequest(action, payload);
+      }
       return new Promise((resolve, reject) => {
           const id = Math.random().toString(36).substring(7);
           
@@ -228,6 +261,17 @@ class DBService {
   }
 
   async createLocalDatabaseFile(): Promise<void> {
+      if ((window as any).electronAPI) {
+          const res = await (window as any).electronAPI.selectDatabaseFile('new');
+          if (res && res.filePath) {
+              this.currentFileName = res.fileName;
+              this.fileHandle = { isElectron: true, path: res.filePath };
+              localStorage.setItem('NetOpti_Last_DB_Path', res.filePath);
+          } else {
+              throw new Error("取消新建文件");
+          }
+          return;
+      }
       if ('showSaveFilePicker' in window) {
           const options = {
               types: [{ description: 'SQLite Database', accept: {'application/vnd.sqlite3': ['.sqlite']} }],
@@ -246,6 +290,17 @@ class DBService {
   }
 
   async openLocalDatabaseFile(): Promise<void> {
+      if ((window as any).electronAPI) {
+          const res = await (window as any).electronAPI.selectDatabaseFile('open');
+          if (res && res.filePath) {
+              this.currentFileName = res.fileName;
+              this.fileHandle = { isElectron: true, path: res.filePath };
+              localStorage.setItem('NetOpti_Last_DB_Path', res.filePath);
+          } else {
+              throw new Error("取消打开文件");
+          }
+          return;
+      }
       if ('showOpenFilePicker' in window) {
           const [handle] = await (window as any).showOpenFilePicker({
               types: [{ description: 'SQLite Database', accept: {'application/vnd.sqlite3': ['.sqlite', '.db']} }],
@@ -270,6 +325,9 @@ class DBService {
   }
 
   async saveToLocalFileHandle(): Promise<void> {
+      if ((window as any).electronAPI) {
+          return;
+      }
       const data = await this.postToWorker('EXPORT_DB');
       
       if (this.fileHandle) {
@@ -307,6 +365,13 @@ class DBService {
   // --- Core Logic ---
 
   async importFileInWorker(file: File, type: NetworkType, onProgress: (pct: number, msg: string) => void): Promise<{ savedToFile: boolean, hasFileHandle: boolean }> {
+      if ((window as any).electronAPI) {
+          const filePath = (file as any).path || '';
+          if (!filePath) throw new Error("无法获取上传文件的本地绝对路径");
+          
+          await this.postToWorker('IMPORT_FILE', { file: filePath, networkType: type }, onProgress);
+          return { savedToFile: true, hasFileHandle: true };
+      }
       await this.postToWorker('IMPORT_FILE', { file: file, networkType: type }, onProgress, [], 600000); // 10 minutes for large files
       
       const data = await this.postToWorker('EXPORT_DB', {}, undefined, [], 60000); // 60 seconds for export
@@ -368,8 +433,15 @@ class DBService {
       return this.postToWorker('ANALYZE_LOAD', params);
   }
 
-  async getDashboardKPI(params: { networkType: NetworkType; granularity: Granularity; metrics: any[] }): Promise<{ latestDate: string | null; prevDate: string | null; kpiValues: Record<string, number>; prevKpiValues: Record<string, number>; totalCells: number }> {
+  async getDashboardKPI(params: { networkType: NetworkType; granularity: Granularity; metrics: any[] }): Promise<{ latestDate: string | null; prevDate: string | null; kpiValues: Record<string, number>; prevKpiValues: Record<string, number>; totalCells: number; prevTotalCells: number }> {
       return this.postToWorker('GET_DASHBOARD_KPI', params);
+  }
+
+  async getCellChanges(params: { networkType: NetworkType; granularity: Granularity; latestDate: string; prevDate: string | null }): Promise<{
+      added: Array<{ cgi: string; cellName: string; changeType: string }>;
+      removed: Array<{ cgi: string; cellName: string; changeType: string }>;
+  }> {
+      return this.postToWorker('GET_CELL_CHANGES', params);
   }
 
   async getCellTrend(params: { networkType: NetworkType; granularity: Granularity; cellName: string }): Promise<any[]> {
