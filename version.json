@@ -1,0 +1,6 @@
+{
+  "version": "1.0.1",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.1/NetOptiMaster-1.0.1-Portable.exe",
+  "notes": "1. 彻底修复多文件导入时因列属性打包压缩引起的数据串列、不对齐缺陷；\n2. 编解码机制重构，完美向下兼容原有历史格式数据库；\n3. 新增基于 GitHub 的在线检测更新，支持国内多镜像节点自适应下载与加速；\n4. 生产环境新增 F12 调试控制台快捷键（Fn + F12）。",
+  "pubDate": "2026-06-12T17:00:00.000Z"
+}
