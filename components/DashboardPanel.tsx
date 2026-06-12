@@ -504,7 +504,7 @@ export const DashboardPanel: React.FC = () => {
                         <button
                             onClick={() => setGranularity(Granularity.HOUR)}
                             className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${granularity === Granularity.HOUR ? 'bg-white text-blue-600 shadow' : 'text-slate-500 hover:text-slate-800'}`}
-                        >天忙时</button>
+                        >小时级</button>
                     </div>
                     <button
                         onClick={handleRefreshAll} disabled={loading}

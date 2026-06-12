@@ -7,7 +7,7 @@ export enum NetworkType {
 }
 
 export enum Granularity {
-  HOUR = '天忙时',
+  HOUR = '小时级',
   DAY = '1天',
   UNKNOWN = '未知',
 }

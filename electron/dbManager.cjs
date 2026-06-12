@@ -20,6 +20,16 @@ function connect(dbPath) {
     db.pragma('temp_store = MEMORY');
     
     createTables(db);
+
+    // 自动执行历史数据迁移（天忙时 -> 小时级）
+    try {
+        db.prepare("UPDATE metrics_day SET granularity = '小时级' WHERE granularity = '天忙时'").run();
+        db.prepare("UPDATE metrics_hour SET granularity = '小时级' WHERE granularity = '天忙时'").run();
+        db.prepare("UPDATE kpi_headers SET granularity = '小时级' WHERE granularity = '天忙时'").run();
+    } catch (e) {
+        console.warn("[DB Manager] Migration failed or already done:", e);
+    }
+
     currentDbPath = dbPath;
     headerCache.clear();
     console.log(`[DB Manager] Connected to database: ${dbPath}`);
@@ -106,9 +116,9 @@ function detectGranularity(row) {
     if (val) {
         const s = String(val).toLowerCase();
         if (s.includes('day') || s.includes('天')) return '1天';
-        if (s.includes('hour') || s.includes('小时')) return '天忙时';
+        if (s.includes('hour') || s.includes('小时')) return '小时级';
     }
-    return '天忙时';
+    return '小时级';
 }
 
 function normalizeDate(input) {
@@ -757,7 +767,7 @@ function handleRequest(action, payload, sendProgress) {
             ).all(networkType, startDate, endDate);
 
             const stats = {};
-            const headers = getHeaders(networkType, '天忙时');
+            const headers = getHeaders(networkType, '小时级');
 
             rawRows.forEach(row => {
                 const cgi = row.cgi;

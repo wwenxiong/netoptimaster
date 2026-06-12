@@ -49,9 +49,9 @@ function detectGranularity(row: Record<string, any>): string {
     if (val) {
         const s = String(val).toLowerCase();
         if (s.includes('day') || s.includes('天')) return '1天';
-        if (s.includes('hour') || s.includes('小时')) return '天忙时';
+        if (s.includes('hour') || s.includes('小时')) return '小时级';
     }
-    return '天忙时';
+    return '小时级';
 }
 
 // Helper: Normalize Date
@@ -245,6 +245,15 @@ self.onmessage = async function (e: MessageEvent) {
                 db.run("PRAGMA temp_store = MEMORY;");
 
                 createTables(db);
+
+                // 自动执行历史数据迁移（天忙时 -> 小时级）
+                try {
+                    db.run("UPDATE metrics_day SET granularity = '小时级' WHERE granularity = '天忙时';");
+                    db.run("UPDATE metrics_hour SET granularity = '小时级' WHERE granularity = '天忙时';");
+                    db.run("UPDATE kpi_headers SET granularity = '小时级' WHERE granularity = '天忙时';");
+                } catch (e) {
+                    console.warn("WASM DB Migration failed:", e);
+                }
 
                 self.postMessage({ id, status: 'success' });
                 break;
@@ -599,7 +608,7 @@ self.onmessage = async function (e: MessageEvent) {
                 stmt.bind([networkType, startIso, endIso]);
 
                 const stats: Record<string, any> = {};
-                const headers = getHeaders(networkType, '天忙时');
+                const headers = getHeaders(networkType, '小时级');
 
                 while (stmt.step()) {
                     const row = stmt.getAsObject();
