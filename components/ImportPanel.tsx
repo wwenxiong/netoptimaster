@@ -271,21 +271,18 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
       return { networkType, granularity };
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const startImportProcess = async (fileObj: File | { path: string; name: string }, fileName: string) => {
     setLoading(true);
     setProgress(0);
     
     // 自动根据文件名特征识别制式和粒度
-    const { networkType, granularity } = autoDetectFileType(file.name);
+    const { networkType, granularity } = autoDetectFileType(fileName);
     const granLabel = granularity === '1天' ? '天级' : '小时级';
 
-    addLog(`开始处理上传文件: ${file.name} [自动识别 -> 制式: ${networkType}, 粒度: ${granLabel}]`);
+    addLog(`开始处理上传文件: ${fileName} [自动识别 -> 制式: ${networkType}, 粒度: ${granLabel}]`);
 
     try {
-        const { savedToFile, skipped } = await dbService.importFileInWorker(file, networkType, (pct, msg) => {
+        const { savedToFile, skipped } = await dbService.importFileInWorker(fileObj, networkType, (pct, msg) => {
             setProgress(pct);
             if (pct % 10 === 0) addLog(`进度: ${pct}% - ${msg}`);
         });
@@ -294,7 +291,7 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
         await refreshStatus();
 
         if (skipped) {
-            addLog(`ℹ️ [手动导入] 文件 ${file.name} 已存在于导入历史中，已自动忽略导入。`);
+            addLog(`ℹ️ [手动导入] 文件 ${fileName} 已存在于导入历史中，已自动忽略导入。`);
         } else if (savedToFile) {
              setHasUnsavedChanges(false);
              addLog("✅ [手动导入] 成功！数据已自动写入本地数据库。");
@@ -309,8 +306,30 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
       console.error(err);
     } finally {
       setLoading(false);
-      e.target.value = ''; 
     }
+  };
+
+  const handleUploadClick = async (e: React.MouseEvent) => {
+      if (isElectron) {
+          e.preventDefault(); // 阻止 label 的默认点击行为（以防触发 input file）
+          try {
+              const res = await (window as any).electronAPI.selectImportFile();
+              if (!res) return; // 用户取消了选择
+              
+              const { filePath, fileName } = res;
+              await startImportProcess({ path: filePath, name: fileName }, fileName);
+          } catch (err: any) {
+              addLog(`❌ [手动导入] 选择文件失败: ${err.message}`);
+          }
+      }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    await startImportProcess(file, file.name);
+    e.target.value = ''; 
   };
 
   const handleTestSFTP = async () => {
@@ -426,7 +445,7 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
                      手动上传指标文件
                  </h3>
                  {!loading ? (
-                     <label className="flex flex-col items-center justify-center w-full h-24 border border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors group">
+                     <label onClick={handleUploadClick} className="flex flex-col items-center justify-center w-full h-24 border border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors group">
                          <div className="flex flex-col items-center justify-center pt-2 pb-3">
                              <Upload className="w-7 h-7 mb-1 text-slate-400 group-hover:text-blue-500 transition-colors" />
                              <p className="text-xs text-slate-600 font-medium">点击或拖拽上传 CSV/TXT 原始指标文件</p>

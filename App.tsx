@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Database, Menu, X, SignalHigh, Loader2, HardDrive, FilePlus, FolderOpen, LogOut, Activity, Search } from 'lucide-react';
+import { LayoutDashboard, Database, Menu, X, SignalHigh, Loader2, HardDrive, FilePlus, FolderOpen, LogOut, Activity, Search, ArrowUpCircle } from 'lucide-react';
 import { ImportPanel } from './components/ImportPanel';
 import { QueryPanel } from './components/QueryPanel';
+import { UpdateModal } from './components/UpdateModal';
 
 import { DashboardPanel } from './components/DashboardPanel';
 import { dbService } from './services/dbService';
@@ -24,6 +25,39 @@ function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
 
+  // Update State
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{ currentVersion: string; latestVersion: string; notes: string; url: string; } | null>(null);
+  const [hasUpdateRedDot, setHasUpdateRedDot] = useState(false);
+
+  const handleCheckUpdate = async (autoShow = false) => {
+      if (!(window as any).electronAPI) return;
+      try {
+          const res = await (window as any).electronAPI.checkUpdate();
+          if (res && res.success && res.hasUpdate) {
+              setUpdateInfo({
+                  currentVersion: res.currentVersion,
+                  latestVersion: res.latestVersion,
+                  notes: res.notes,
+                  url: res.url
+              });
+              setHasUpdateRedDot(true);
+              if (!autoShow) {
+                  setUpdateModalOpen(true);
+              }
+          } else {
+              setHasUpdateRedDot(false);
+              if (!autoShow) {
+                  alert(`当前已经是最新版本 (v${res?.currentVersion || '1.0.0'})。`);
+              }
+          }
+      } catch (err: any) {
+          if (!autoShow) {
+              alert(`检查更新失败: ${err.message}`);
+          }
+      }
+  };
+
   useEffect(() => {
       // Check initial state with a safety timeout
       let mounted = true;
@@ -38,6 +72,11 @@ function App() {
           if (mounted) {
               setIsReady(true);
               setHasFile(dbService.isFileLinked());
+              
+              // 自动在后台检查更新
+              setTimeout(() => {
+                  handleCheckUpdate(true);
+              }, 2000);
           }
       }).catch(err => {
           if (mounted) {
@@ -236,6 +275,41 @@ function App() {
                  </div>
              )}
         </div>
+
+        {/* Update Info Widget (仅在 Electron 桌面端显示) */}
+        {!!(window as any).electronAPI && (
+            <div className="p-4 border-t border-slate-800 bg-slate-900/40">
+                {sidebarOpen ? (
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <div className="flex items-center gap-1.5 font-mono">
+                            <span>系统版本: v1.0.0</span>
+                            {hasUpdateRedDot && (
+                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            )}
+                        </div>
+                        <button 
+                            onClick={() => handleCheckUpdate(false)}
+                            className="text-blue-400 hover:text-blue-300 font-bold transition-colors flex items-center gap-1"
+                        >
+                            检查更新
+                        </button>
+                    </div>
+                ) : (
+                    <div className="flex justify-center relative">
+                        <button 
+                            onClick={() => handleCheckUpdate(false)} 
+                            title="检查更新" 
+                            className="text-slate-400 hover:text-white transition-colors"
+                        >
+                            <ArrowUpCircle className="w-4 h-4" />
+                        </button>
+                        {hasUpdateRedDot && (
+                            <span className="absolute top-0 right-3.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -271,6 +345,13 @@ function App() {
             {currentView === View.QUERY && <QueryPanel />}
         </main>
       </div>
+
+      {/* Update Modal */}
+      <UpdateModal 
+          isOpen={updateModalOpen}
+          onClose={() => setUpdateModalOpen(false)}
+          updateInfo={updateInfo}
+      />
     </div>
   );
 }

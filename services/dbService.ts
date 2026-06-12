@@ -364,9 +364,9 @@ class DBService {
 
   // --- Core Logic ---
 
-  async importFileInWorker(file: File, type: NetworkType, onProgress: (pct: number, msg: string) => void): Promise<{ savedToFile: boolean, hasFileHandle: boolean, skipped?: boolean }> {
+  async importFileInWorker(file: File | { path: string; name: string }, type: NetworkType, onProgress: (pct: number, msg: string) => void): Promise<{ savedToFile: boolean, hasFileHandle: boolean, skipped?: boolean }> {
       if ((window as any).electronAPI) {
-          const filePath = (file as any).path || '';
+          const filePath = 'path' in file ? file.path : ((file as any).path || '');
           if (!filePath) throw new Error("无法获取上传文件的本地绝对路径");
           
           const result = await this.postToWorker('IMPORT_FILE', { file: filePath, networkType: type }, onProgress);
