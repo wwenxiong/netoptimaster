@@ -19,17 +19,16 @@ export const DataTable: React.FC<DataTableProps> = ({ data }) => {
   // Extract all unique keys from data for headers
   const allColumns = useMemo(() => {
     if (data.length === 0) return [];
-    // If it's a Diff result, we want specific ordering
-    // cellName, cgi, networkType, granularity, [Metric1 Base, Metric1 Curr, Metric1 Diff...], [Metric2...]
     
     const keys = Object.keys(data[0]);
-    const standardKeys = ['timestamp', 'cellName', 'cgi', 'granularity', 'networkType', 'id', 'rawData'];
-    const metricKeys = keys.filter(k => !standardKeys.includes(k));
-    
-    // Remove sorting to preserve original CSV order or Worker generation order
-    // metricKeys.sort(); 
+    const timeKeys = ['StartTime', '开始时间', 'Time', '时间'];
 
-    return ['cellName', 'cgi', 'granularity', ...metricKeys, 'timestamp'];
+    // 数据库自带的系统字段过滤掉，并且将原始时间字段从指标列中过滤
+    const standardKeys = ['timestamp', 'cellName', 'cgi', 'granularity', 'networkType', 'id', 'rawData'];
+    const metricKeys = keys.filter(k => !standardKeys.includes(k) && !timeKeys.includes(k));
+    
+    // 将时间统一收拢为“开始时间”，排在 granularity 之后显示
+    return ['cellName', 'cgi', 'granularity', '开始时间', ...metricKeys];
   }, [data]);
 
   // Initialize visibility when data columns change, but merge with saved preferences
@@ -101,7 +100,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data }) => {
 
   const formatCellValue = (key: string, value: any) => {
       // 1. If column name suggests time/date
-      const isTimeColumn = /time|date|时间|日期/i.test(key) && !key.includes('粒度');
+      const isTimeColumn = (key === '开始时间' || /time|date|时间|日期/i.test(key)) && !key.includes('粒度');
       
       if (isTimeColumn) {
           if (typeof value === 'number' && value > 40000) {
@@ -278,11 +277,9 @@ export const DataTable: React.FC<DataTableProps> = ({ data }) => {
                     }
 
                     let rawVal = row[col];
-                    if (rawVal === undefined || rawVal === null) {
-                      // 时间列 Fallback 兼容，处理手动导入与 SFTP 自动导入时间字段名不一致的问题
-                      if (col === 'StartTime' || col === '开始时间' || col === 'Time' || col === '时间') {
-                        rawVal = row['StartTime'] ?? row['开始时间'] ?? row['Time'] ?? row['时间'];
-                      }
+                    if (col === '开始时间') {
+                      // 时间列统一归一化，且终极 Fallback 到物理列 timestamp 字段
+                      rawVal = row['StartTime'] ?? row['开始时间'] ?? row['Time'] ?? row['时间'] ?? row['timestamp'];
                     }
                     const val = formatCellValue(col, rawVal);
                     const cellStyle = getCellStyle(col, val);
