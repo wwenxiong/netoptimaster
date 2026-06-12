@@ -364,15 +364,15 @@ class DBService {
 
   // --- Core Logic ---
 
-  async importFileInWorker(file: File, type: NetworkType, onProgress: (pct: number, msg: string) => void): Promise<{ savedToFile: boolean, hasFileHandle: boolean }> {
+  async importFileInWorker(file: File, type: NetworkType, onProgress: (pct: number, msg: string) => void): Promise<{ savedToFile: boolean, hasFileHandle: boolean, skipped?: boolean }> {
       if ((window as any).electronAPI) {
           const filePath = (file as any).path || '';
           if (!filePath) throw new Error("无法获取上传文件的本地绝对路径");
           
-          await this.postToWorker('IMPORT_FILE', { file: filePath, networkType: type }, onProgress);
-          return { savedToFile: true, hasFileHandle: true };
+          const result = await this.postToWorker('IMPORT_FILE', { file: filePath, networkType: type }, onProgress);
+          return { savedToFile: true, hasFileHandle: true, skipped: result && result.skipped };
       }
-      await this.postToWorker('IMPORT_FILE', { file: file, networkType: type }, onProgress, [], 600000); // 10 minutes for large files
+      const result = await this.postToWorker('IMPORT_FILE', { file: file, networkType: type }, onProgress, [], 600000); // 10 minutes for large files
       
       const data = await this.postToWorker('EXPORT_DB', {}, undefined, [], 60000); // 60 seconds for export
       this.saveToIDB(data);
@@ -397,7 +397,15 @@ class DBService {
           }
       }
       
-      return { savedToFile, hasFileHandle };
+      return { savedToFile, hasFileHandle, skipped: result && result.skipped };
+  }
+
+  async testSFTP(connection: any): Promise<any> {
+      return this.postToWorker('SFTP_TEST', { connection });
+  }
+
+  async syncSFTP(connection: any, onProgress: (pct: number, msg: string) => void): Promise<any> {
+      return this.postToWorker('SFTP_SYNC', { connection }, onProgress);
   }
 
   async query(params: any): Promise<MetricRecord[]> {

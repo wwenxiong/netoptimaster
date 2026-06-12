@@ -756,6 +756,22 @@ self.onmessage = async function (e: MessageEvent) {
             case 'IMPORT_FILE': {
                 if (!db) throw new Error("DB not initialized");
                 const { file, networkType } = payload;
+                const fileName = file.name;
+
+                // 自动识别已导入的数据，已导入的忽略
+                try {
+                    const checkRes = db.exec("SELECT count(*) FROM import_history WHERE fileName = ?", [fileName]);
+                    if (checkRes.length > 0 && checkRes[0].values.length > 0) {
+                        const cnt = checkRes[0].values[0][0] as number;
+                        if (cnt > 0) {
+                            self.postMessage({ id, status: 'progress', progress: 100, message: `文件 ${fileName} 已经在历史记录中，已自动忽略。` });
+                            self.postMessage({ id, status: 'success', data: { count: 0, skipped: true } });
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("检查导入历史失败:", e);
+                }
 
                 self.postMessage({ id, status: 'progress', message: '正在启动流式解析引擎...' });
 
@@ -1572,6 +1588,12 @@ self.onmessage = async function (e: MessageEvent) {
                 }
 
                 self.postMessage({ id, status: 'success', data: finalResults });
+                break;
+            }
+
+            case 'SFTP_SYNC':
+            case 'SFTP_TEST': {
+                self.postMessage({ id, status: 'error', error: 'SFTP 自动同步仅在桌面客户端（Electron）中可用。' });
                 break;
             }
 

@@ -2,6 +2,8 @@ const Database = require('better-sqlite3');
 const Papa = require('papaparse');
 const fs = require('fs');
 const path = require('path');
+const { Client } = require('ssh2');
+const os = require('os');
 
 let db = null;
 let currentDbPath = null;
@@ -227,6 +229,19 @@ function importFile(filePath, networkType, sendProgress) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error("数据库连接未建立，请先打开或创建数据库文件。"));
 
+        const fileName = path.basename(filePath);
+        
+        // 自动识别已导入的数据，已导入的忽略
+        try {
+            const row = db.prepare("SELECT count(*) as cnt FROM import_history WHERE fileName = ?").get(fileName);
+            if (row && row.cnt > 0) {
+                sendProgress(100, `文件 ${fileName} 已经在历史记录中，已自动忽略。`);
+                return resolve({ count: 0, skipped: true });
+            }
+        } catch (e) {
+            console.warn("检查导入历史记录失败:", e);
+        }
+
         sendProgress(0, '正在初始化底层数据流解析器...');
 
         const insertStmtDay = db.prepare(`
@@ -401,6 +416,14 @@ function handleRequest(action, payload, sendProgress) {
         case 'IMPORT_FILE': {
             // payload 包含 filePath 和 networkType
             return importFile(payload.file, payload.networkType, sendProgress);
+        }
+
+        case 'SFTP_TEST': {
+            return sftpTest(payload.connection);
+        }
+
+        case 'SFTP_SYNC': {
+            return sftpSync(payload.connection, sendProgress);
         }
 
         case 'QUERY': {
@@ -1366,6 +1389,186 @@ function handleRequest(action, payload, sendProgress) {
         default:
             throw new Error(`Unknown action: ${action}`);
     }
+}
+
+function autoDetectFileType(filename) {
+    const lowerName = filename.toLowerCase();
+    
+    // 1. Detect granularity
+    let granularity = '小时级'; // Default to hourly
+    if (lowerName.includes('day') || lowerName.includes('天')) {
+        granularity = '1天';
+    } else if (lowerName.includes('hour') || lowerName.includes('小时') || lowerName.includes('忙时')) {
+        granularity = '小时级';
+    }
+
+    // 2. Detect network level (cell vs operator)
+    const isIsp = lowerName.includes('isp') || lowerName.includes('运营商') || lowerName.includes('operator');
+
+    // 3. Detect network type (4G vs 5G)
+    const is5G = lowerName.includes('5g') || lowerName.includes('nr');
+    
+    let networkType = '4G';
+    if (isIsp) {
+        networkType = is5G ? '5G_ISP' : '4G_ISP';
+    } else {
+        networkType = is5G ? '5G' : '4G';
+    }
+
+    return { networkType, granularity };
+}
+
+function sftpTest(config) {
+    return new Promise((resolve) => {
+        const conn = new Client();
+        conn.on('ready', () => {
+            conn.end();
+            resolve({ status: 'success' });
+        });
+        conn.on('error', (err) => {
+            resolve({ status: 'error', message: err.message });
+        });
+        try {
+            conn.connect({
+                host: config.host,
+                port: parseInt(config.port, 10) || 22,
+                username: config.username,
+                password: config.password,
+                timeout: 8000
+            });
+        } catch (e) {
+            resolve({ status: 'error', message: e.message });
+        }
+    });
+}
+
+function sftpSync(config, sendProgress) {
+    return new Promise((resolve, reject) => {
+        if (!db) return reject(new Error("数据库连接未建立"));
+
+        const conn = new Client();
+        
+        conn.on('ready', () => {
+            sendProgress(5, 'SFTP 连接成功，正在初始化 SFTP 子系统...');
+            conn.sftp((err, sftp) => {
+                if (err) {
+                    conn.end();
+                    return reject(new Error('SFTP 初始化失败: ' + err.message));
+                }
+
+                const remoteDir = config.remotePath || '.';
+                sendProgress(10, `读取 SFTP 目录: ${remoteDir}`);
+                
+                sftp.readdir(remoteDir, async (err, list) => {
+                    if (err) {
+                        conn.end();
+                        return reject(new Error(`读取目录 ${remoteDir} 失败: ` + err.message));
+                    }
+
+                    // 过滤出 .csv 和 .txt 文件
+                    const files = list.filter(f => {
+                        const ext = path.extname(f.filename).toLowerCase();
+                        return ext === '.csv' || ext === '.txt';
+                    });
+
+                    if (files.length === 0) {
+                        conn.end();
+                        sendProgress(100, '同步完成：指定目录下未找到符合条件的 CSV/TXT 文件。');
+                        return resolve({ status: 'success', importedCount: 0 });
+                    }
+
+                    sendProgress(15, `找到 ${files.length} 个指标文件，正在对比数据库历史记录...`);
+
+                    // 获取已导入的所有文件名
+                    let importedFiles = new Set();
+                    try {
+                        const rows = db.prepare("SELECT DISTINCT fileName FROM import_history").all();
+                        rows.forEach(r => importedFiles.add(r.fileName));
+                    } catch (e) {
+                        console.warn("Failed to query import history:", e);
+                    }
+
+                    // 找出未导入的文件
+                    const pendingFiles = files.filter(f => !importedFiles.has(f.filename));
+                    
+                    if (pendingFiles.length === 0) {
+                        conn.end();
+                        sendProgress(100, '所有文件都已导入过，已自动忽略。');
+                        return resolve({ status: 'success', importedCount: 0 });
+                    }
+
+                    sendProgress(20, `共检测到 ${pendingFiles.length} 个新文件需要导入。`);
+                    let successCount = 0;
+
+                    // 使用串行循环处理，确保每个文件在导入时不会发生 SQLite 的锁冲突，并且按部就班打印小进度
+                    try {
+                        for (let i = 0; i < pendingFiles.length; i++) {
+                            const fileInfo = pendingFiles[i];
+                            const filename = fileInfo.filename;
+                            const remoteFilePath = path.join(remoteDir, filename).replace(/\\/g, '/'); // ensure forward slash remote path
+                            const localTempPath = path.join(os.tmpdir(), `sftp_temp_${Date.now()}_${filename}`);
+
+                            sendProgress(
+                                Math.round(20 + (i / pendingFiles.length) * 75),
+                                `[${i+1}/${pendingFiles.length}] 正在下载: ${filename}...`
+                            );
+
+                            // 1. fastGet
+                            await new Promise((resDownload, rejDownload) => {
+                                sftp.fastGet(remoteFilePath, localTempPath, (errDownload) => {
+                                    if (errDownload) rejDownload(errDownload);
+                                    else resDownload();
+                                });
+                            });
+
+                            // 2. autoDetectFileType
+                            const { networkType, granularity } = autoDetectFileType(filename);
+                            const granLabel = granularity === '1天' ? '天级' : '小时级';
+                            
+                            sendProgress(
+                                Math.round(20 + ((i + 0.5) / pendingFiles.length) * 75),
+                                `[${i+1}/${pendingFiles.length}] 识别成功 -> 制式: ${networkType}, 粒度: ${granLabel}。正在解析导入...`
+                            );
+
+                            // 3. importFile
+                            await importFile(localTempPath, networkType, (pct, msg) => {
+                                // 忽略局部 progress，防止日志过多刷屏
+                            });
+
+                            // 4. fs.unlink
+                            try { fs.unlinkSync(localTempPath); } catch (e) {}
+
+                            successCount++;
+                        }
+                    } catch (loopErr) {
+                        conn.end();
+                        return reject(loopErr);
+                    }
+
+                    conn.end();
+                    sendProgress(100, `自动同步完成！成功导入了 ${successCount} 个新文件。`);
+                    resolve({ status: 'success', importedCount: successCount });
+                });
+            });
+        });
+
+        conn.on('error', (err) => {
+            reject(new Error('SFTP 连接错误: ' + err.message));
+        });
+
+        // 建立连接
+        try {
+            conn.connect({
+                host: config.host,
+                port: parseInt(config.port, 10) || 22,
+                username: config.username,
+                password: config.password,
+                timeout: 15000 // 15s timeout
+            });
+        } catch (err) {
+            reject(new Error('SFTP 连接建立失败: ' + err.message));
+        }
+    });
 }
 
 module.exports = {
