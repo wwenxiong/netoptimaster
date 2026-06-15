@@ -225,11 +225,11 @@ function saveHeaders(networkType, granularity, headers) {
 }
 
 // --- Import Processing ---
-function importFile(filePath, networkType, sendProgress) {
+function importFile(filePath, networkType, sendProgress, customFileName) {
     return new Promise((resolve, reject) => {
         if (!db) return reject(new Error("数据库连接未建立，请先打开或创建数据库文件。"));
 
-        const fileName = path.basename(filePath);
+        const fileName = customFileName || path.basename(filePath);
         
         // 自动识别已导入的数据，已导入的忽略
         try {
@@ -359,7 +359,7 @@ function importFile(filePath, networkType, sendProgress) {
                 try {
                     db.prepare(
                         "INSERT INTO import_history (fileName, networkType, recordCount, importTime) VALUES (?, ?, ?, ?)"
-                    ).run(path.basename(filePath), networkType, processedCount, new Date().toISOString());
+                    ).run(fileName, networkType, processedCount, new Date().toISOString());
                 } catch (e) {
                     console.warn("Failed to record import history", e);
                 }
@@ -415,7 +415,7 @@ function handleRequest(action, payload, sendProgress) {
 
         case 'IMPORT_FILE': {
             // payload 包含 filePath 和 networkType
-            return importFile(payload.file, payload.networkType, sendProgress);
+            return importFile(payload.file, payload.networkType, sendProgress, payload.customFileName);
         }
 
         case 'SFTP_TEST': {
@@ -1533,7 +1533,7 @@ function sftpSync(config, sendProgress) {
                             // 3. importFile
                             await importFile(localTempPath, networkType, (pct, msg) => {
                                 // 忽略局部 progress，防止日志过多刷屏
-                            });
+                            }, filename);
 
                             // 4. fs.unlink
                             try { fs.unlinkSync(localTempPath); } catch (e) {}
