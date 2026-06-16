@@ -1,6 +1,6 @@
 {
-  "version": "1.0.7",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.7/NetOptiMaster.Setup.1.0.7.exe",
-  "notes": "1. 优化小区变动明细与包含小区数量计算：全部统一改为通过小区名称（cellName）来计算唯一，避开了因CGI字段重复或缺失导致的数据量统计不一致问题。",
-  "pubDate": "2026-06-16T07:07:00.000Z"
+  "version": "1.0.8",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.8/NetOptiMaster.Setup.1.0.8.exe",
+  "notes": "1. 将小区唯一性/去重计算维度优化为：网元ID * 256 + cellId，以提供更可靠的小区物理排重，确保包含小区显示数与导出变动明细数量完全一致。",
+  "pubDate": "2026-06-16T07:29:00.000Z"
 }

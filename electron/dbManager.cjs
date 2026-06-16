@@ -192,6 +192,21 @@ function decodeRawData(rawDataStr, headers) {
     }
 }
 
+// Calculate unique cell ID based on: 网元ID*256+cellId
+function getUniqueCellId(raw) {
+    const enodebId = raw['网元ID'] || raw['网元 ID'] || raw['基站ID'] || raw['基站 ID'] || raw['eNodeB ID'] || raw['EnodeB ID'] || raw['gNodeB ID'] || raw['gNB ID'] || raw['基站标识'] || raw['EnodeBID'] || raw['gNodeBID'];
+    const cellId = raw['小区ID'] || raw['小区 ID'] || raw['CellID'] || raw['Cell ID'] || raw['cellId'] || raw['本地小区ID'] || raw['本地小区 ID'] || raw['CellId'];
+    
+    if (enodebId !== undefined && cellId !== undefined) {
+        const ne = parseInt(String(enodebId), 10);
+        const cell = parseInt(String(cellId), 10);
+        if (!isNaN(ne) && !isNaN(cell)) {
+            return String(ne * 256 + cell);
+        }
+    }
+    return String(raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['cgi'] || '0');
+}
+
 function getHeaders(networkType, granularity) {
     const key = `${networkType}_${granularity}`;
     if (headerCache.has(key)) {
@@ -914,7 +929,7 @@ function handleRequest(action, payload, sendProgress) {
             const prevDate = allDbTsRes[1] ? allDbTsRes[1].timestamp : null;
 
             const calculateKPIForDate = (dateStr) => {
-                const rawRows = db.prepare(`SELECT cellName, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
+                const rawRows = db.prepare(`SELECT rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
 
                 const sums = {};
                 const counts = {};
@@ -928,14 +943,13 @@ function handleRequest(action, payload, sendProgress) {
                     mins[m.metric] = Infinity;
                 });
 
-                const uniqueCellNames = new Set();
+                const uniqueCellIds = new Set();
                 const headers = getHeaders(networkType, granularity);
                 
                 rawRows.forEach(row => {
-                    if (row.cellName) {
-                        uniqueCellNames.add(row.cellName);
-                    }
                     const raw = decodeRawData(row.rawData, headers);
+                    const key = getUniqueCellId(raw);
+                    uniqueCellIds.add(key);
 
                     metrics.forEach((m) => {
                         let val = parseNumericString(raw[m.metric]);
@@ -966,7 +980,7 @@ function handleRequest(action, payload, sendProgress) {
                     }
                 });
 
-                return { values, cellCount: uniqueCellNames.size };
+                return { values, cellCount: uniqueCellIds.size };
             };
 
             const latestKPI = calculateKPIForDate(latestDate);
@@ -1331,13 +1345,15 @@ function handleRequest(action, payload, sendProgress) {
         case 'GET_CELL_CHANGES': {
             const { networkType, granularity, latestDate, prevDate } = payload;
             const table = granularity === '1天' ? 'metrics_day' : 'metrics_hour';
+            const headers = getHeaders(networkType, granularity);
 
             const cellsLatest = new Map();
-            const rowsLatest = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, latestDate);
+            const rowsLatest = db.prepare(`SELECT cellName, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, latestDate);
             rowsLatest.forEach(row => {
-                if (row.cellName) {
-                    cellsLatest.set(row.cellName, row.cgi || '0');
-                }
+                const raw = decodeRawData(row.rawData, headers);
+                const key = getUniqueCellId(raw);
+                const cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
+                cellsLatest.set(key, { cellName: row.cellName, cgi: String(cgi) });
             });
 
             const added = [];
@@ -1345,22 +1361,23 @@ function handleRequest(action, payload, sendProgress) {
 
             if (prevDate) {
                 const cellsPrev = new Map();
-                const rowsPrev = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, prevDate);
+                const rowsPrev = db.prepare(`SELECT cellName, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, prevDate);
                 rowsPrev.forEach(row => {
-                    if (row.cellName) {
-                        cellsPrev.set(row.cellName, row.cgi || '0');
+                    const raw = decodeRawData(row.rawData, headers);
+                    const key = getUniqueCellId(raw);
+                    const cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
+                    cellsPrev.set(key, { cellName: row.cellName, cgi: String(cgi) });
+                });
+
+                cellsLatest.forEach((val, key) => {
+                    if (!cellsPrev.has(key)) {
+                        added.push({ cgi: val.cgi, cellName: val.cellName, changeType: '新增' });
                     }
                 });
 
-                cellsLatest.forEach((cgi, cellName) => {
-                    if (!cellsPrev.has(cellName)) {
-                        added.push({ cgi, cellName, changeType: '新增' });
-                    }
-                });
-
-                cellsPrev.forEach((cgi, cellName) => {
-                    if (!cellsLatest.has(cellName)) {
-                        removed.push({ cgi, cellName, changeType: '减少' });
+                cellsPrev.forEach((val, key) => {
+                    if (!cellsLatest.has(key)) {
+                        removed.push({ cgi: val.cgi, cellName: val.cellName, changeType: '减少' });
                     }
                 });
             }
