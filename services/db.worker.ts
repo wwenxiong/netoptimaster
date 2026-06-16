@@ -892,7 +892,7 @@ self.onmessage = async function (e: MessageEvent) {
                             let cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
                             let rawTime = raw['StartTime'] || raw['开始时间'] || raw['Time'] || raw['时间'];
 
-                            if (!rawTime && cellName === 'Unknown') return;
+                            if (!rawTime && cellName === 'Unknown') continue;
 
                             const timestamp = normalizeDate(rawTime);
                             const granularity = detectGranularity(raw);

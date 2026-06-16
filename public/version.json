@@ -1,6 +1,6 @@
 {
-  "version": "1.0.10",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.10/NetOptiMaster.Setup.1.0.10.exe",
-  "notes": "1. 优化 CGI 唯一标识的提取规则，全面兼容原始表中的 eNodeBId 和 cellId 并支持不区分大小写和空格匹配，彻底解决前一日数据计算漂移和数量不对的问题。",
-  "pubDate": "2026-06-16T16:08:00.000Z"
+  "version": "1.0.11",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.11/NetOptiMaster.Setup.1.0.11.exe",
+  "notes": "1. 修复 Web 模式下导入 CSV 数据若遇空行/异常行会导致同批次后段正常数据被截断丢失的 BUG。\n2. 进一步优化基站小区ID识别提取逻辑，全面兼容原始表中的 eNodeBId 和 cellId 唯一匹配计算。",
+  "pubDate": "2026-06-16T16:40:00.000Z"
 }
