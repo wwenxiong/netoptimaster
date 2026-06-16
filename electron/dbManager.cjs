@@ -914,7 +914,7 @@ function handleRequest(action, payload, sendProgress) {
             const prevDate = allDbTsRes[1] ? allDbTsRes[1].timestamp : null;
 
             const calculateKPIForDate = (dateStr) => {
-                const rawRows = db.prepare(`SELECT rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
+                const rawRows = db.prepare(`SELECT cgi, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
 
                 const sums = {};
                 const counts = {};
@@ -928,12 +928,14 @@ function handleRequest(action, payload, sendProgress) {
                     mins[m.metric] = Infinity;
                 });
 
-                let cellCount = 0;
+                const uniqueCgis = new Set();
                 const headers = getHeaders(networkType, granularity);
                 
                 rawRows.forEach(row => {
+                    if (row.cgi) {
+                        uniqueCgis.add(row.cgi);
+                    }
                     const raw = decodeRawData(row.rawData, headers);
-                    cellCount++;
 
                     metrics.forEach((m) => {
                         let val = parseNumericString(raw[m.metric]);
@@ -964,7 +966,7 @@ function handleRequest(action, payload, sendProgress) {
                     }
                 });
 
-                return { values, cellCount };
+                return { values, cellCount: uniqueCgis.size };
             };
 
             const latestKPI = calculateKPIForDate(latestDate);

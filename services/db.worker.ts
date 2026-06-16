@@ -1050,7 +1050,7 @@ self.onmessage = async function (e: MessageEvent) {
                 const prevDate = allDbTsRes[0].values[1] ? (allDbTsRes[0].values[1][0] as string) : null;
 
                 const calculateKPIForDate = (dateStr: string) => {
-                    const stmt = db.prepare(`SELECT rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
+                    const stmt = db.prepare(`SELECT cgi, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
                     stmt.bind([networkType, granularity, dateStr]);
 
                     const sums: Record<string, number> = {};
@@ -1065,12 +1065,14 @@ self.onmessage = async function (e: MessageEvent) {
                         mins[m.metric] = Infinity;
                     });
 
-                    let cellCount = 0;
+                    const uniqueCgis = new Set<string>();
                     const headers = getHeaders(networkType, granularity);
                     while (stmt.step()) {
                         const row = stmt.getAsObject();
+                        if (row.cgi) {
+                            uniqueCgis.add(row.cgi as string);
+                        }
                         const raw = decodeRawData(row.rawData as string, headers);
-                        cellCount++;
 
                         metrics.forEach((m) => {
                             let val = parseNumericString(raw[m.metric]);
@@ -1102,7 +1104,7 @@ self.onmessage = async function (e: MessageEvent) {
                         }
                     });
 
-                    return { values, cellCount };
+                    return { values, cellCount: uniqueCgis.size };
                 };
 
                 const latestKPI = calculateKPIForDate(latestDate);
