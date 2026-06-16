@@ -914,7 +914,7 @@ function handleRequest(action, payload, sendProgress) {
             const prevDate = allDbTsRes[1] ? allDbTsRes[1].timestamp : null;
 
             const calculateKPIForDate = (dateStr) => {
-                const rawRows = db.prepare(`SELECT cgi, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
+                const rawRows = db.prepare(`SELECT cellName, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, dateStr);
 
                 const sums = {};
                 const counts = {};
@@ -928,12 +928,12 @@ function handleRequest(action, payload, sendProgress) {
                     mins[m.metric] = Infinity;
                 });
 
-                const uniqueCgis = new Set();
+                const uniqueCellNames = new Set();
                 const headers = getHeaders(networkType, granularity);
                 
                 rawRows.forEach(row => {
-                    if (row.cgi) {
-                        uniqueCgis.add(row.cgi);
+                    if (row.cellName) {
+                        uniqueCellNames.add(row.cellName);
                     }
                     const raw = decodeRawData(row.rawData, headers);
 
@@ -966,7 +966,7 @@ function handleRequest(action, payload, sendProgress) {
                     }
                 });
 
-                return { values, cellCount: uniqueCgis.size };
+                return { values, cellCount: uniqueCellNames.size };
             };
 
             const latestKPI = calculateKPIForDate(latestDate);
@@ -1335,7 +1335,9 @@ function handleRequest(action, payload, sendProgress) {
             const cellsLatest = new Map();
             const rowsLatest = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, latestDate);
             rowsLatest.forEach(row => {
-                cellsLatest.set(row.cgi, row.cellName);
+                if (row.cellName) {
+                    cellsLatest.set(row.cellName, row.cgi || '0');
+                }
             });
 
             const added = [];
@@ -1345,17 +1347,19 @@ function handleRequest(action, payload, sendProgress) {
                 const cellsPrev = new Map();
                 const rowsPrev = db.prepare(`SELECT cgi, cellName FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`).all(networkType, granularity, prevDate);
                 rowsPrev.forEach(row => {
-                    cellsPrev.set(row.cgi, row.cellName);
+                    if (row.cellName) {
+                        cellsPrev.set(row.cellName, row.cgi || '0');
+                    }
                 });
 
-                cellsLatest.forEach((cellName, cgi) => {
-                    if (!cellsPrev.has(cgi)) {
+                cellsLatest.forEach((cgi, cellName) => {
+                    if (!cellsPrev.has(cellName)) {
                         added.push({ cgi, cellName, changeType: '新增' });
                     }
                 });
 
-                cellsPrev.forEach((cellName, cgi) => {
-                    if (!cellsLatest.has(cgi)) {
+                cellsPrev.forEach((cgi, cellName) => {
+                    if (!cellsLatest.has(cellName)) {
                         removed.push({ cgi, cellName, changeType: '减少' });
                     }
                 });

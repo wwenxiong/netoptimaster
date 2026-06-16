@@ -1050,7 +1050,7 @@ self.onmessage = async function (e: MessageEvent) {
                 const prevDate = allDbTsRes[0].values[1] ? (allDbTsRes[0].values[1][0] as string) : null;
 
                 const calculateKPIForDate = (dateStr: string) => {
-                    const stmt = db.prepare(`SELECT cgi, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
+                    const stmt = db.prepare(`SELECT cellName, rawData FROM ${table} WHERE networkType = ? AND granularity = ? AND timestamp = ?`);
                     stmt.bind([networkType, granularity, dateStr]);
 
                     const sums: Record<string, number> = {};
@@ -1065,12 +1065,12 @@ self.onmessage = async function (e: MessageEvent) {
                         mins[m.metric] = Infinity;
                     });
 
-                    const uniqueCgis = new Set<string>();
+                    const uniqueCellNames = new Set<string>();
                     const headers = getHeaders(networkType, granularity);
                     while (stmt.step()) {
                         const row = stmt.getAsObject();
-                        if (row.cgi) {
-                            uniqueCgis.add(row.cgi as string);
+                        if (row.cellName) {
+                            uniqueCellNames.add(row.cellName as string);
                         }
                         const raw = decodeRawData(row.rawData as string, headers);
 
@@ -1104,7 +1104,7 @@ self.onmessage = async function (e: MessageEvent) {
                         }
                     });
 
-                    return { values, cellCount: uniqueCgis.size };
+                    return { values, cellCount: uniqueCellNames.size };
                 };
 
                 const latestKPI = calculateKPIForDate(latestDate);
@@ -1140,7 +1140,9 @@ self.onmessage = async function (e: MessageEvent) {
                 const cellsLatest = new Map<string, string>();
                 while (stmt1.step()) {
                     const row = stmt1.getAsObject();
-                    cellsLatest.set(row.cgi as string, row.cellName as string);
+                    if (row.cellName) {
+                        cellsLatest.set(row.cellName as string, row.cgi as string || '0');
+                    }
                 }
                 stmt1.free();
 
@@ -1153,18 +1155,20 @@ self.onmessage = async function (e: MessageEvent) {
                     const cellsPrev = new Map<string, string>();
                     while (stmt2.step()) {
                         const row = stmt2.getAsObject();
-                        cellsPrev.set(row.cgi as string, row.cellName as string);
+                        if (row.cellName) {
+                            cellsPrev.set(row.cellName as string, row.cgi as string || '0');
+                        }
                     }
                     stmt2.free();
 
-                    cellsLatest.forEach((cellName, cgi) => {
-                        if (!cellsPrev.has(cgi)) {
+                    cellsLatest.forEach((cgi, cellName) => {
+                        if (!cellsPrev.has(cellName)) {
                             added.push({ cgi, cellName, changeType: '新增' });
                         }
                     });
 
-                    cellsPrev.forEach((cellName, cgi) => {
-                        if (!cellsLatest.has(cgi)) {
+                    cellsPrev.forEach((cgi, cellName) => {
+                        if (!cellsLatest.has(cellName)) {
                             removed.push({ cgi, cellName, changeType: '减少' });
                         }
                     });

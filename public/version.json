@@ -1,6 +1,6 @@
 {
-  "version": "1.0.6",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.6/NetOptiMaster.Setup.1.0.6.exe",
-  "notes": "1. 修复计算小区变动明细功能中，全网KPI概览的小区显示数量由于未去重导致与导出明细数量不一致的BUG。",
-  "pubDate": "2026-06-16T06:47:00.000Z"
+  "version": "1.0.7",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.7/NetOptiMaster.Setup.1.0.7.exe",
+  "notes": "1. 优化小区变动明细与包含小区数量计算：全部统一改为通过小区名称（cellName）来计算唯一，避开了因CGI字段重复或缺失导致的数据量统计不一致问题。",
+  "pubDate": "2026-06-16T07:07:00.000Z"
 }
