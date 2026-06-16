@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.9/NetOptiMaster.Setup.1.0.9.exe",
-  "notes": "1. 进一步优化基站小区ID识别提取：自动过滤含有大ID的CellID，防止ID合并引起前一日和今日小区数量漂移错误。\n2. 统一将导出的CGI/ID显示内容与后台去重匹配唯一ID物理绑定，解决展示数量与导出明细不一致的体验BUG。",
-  "pubDate": "2026-06-16T08:02:00.000Z"
+  "version": "1.0.10",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.10/NetOptiMaster.Setup.1.0.10.exe",
+  "notes": "1. 优化 CGI 唯一标识的提取规则，全面兼容原始表中的 eNodeBId 和 cellId 并支持不区分大小写和空格匹配，彻底解决前一日数据计算漂移和数量不对的问题。",
+  "pubDate": "2026-06-16T16:08:00.000Z"
 }

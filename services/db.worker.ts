@@ -218,45 +218,73 @@ function decodeRawData(rawDataStr: string, headers: string[]): Record<string, an
 
 // Calculate unique cell ID based on: 网元ID*256+cellId (Robust version)
 function getUniqueCellId(raw: Record<string, any>): string {
-    // 1. 优先获取明确的小区ID（小数字，通常为0-255）
-    let cellIdVal = raw['小区ID'] || raw['小区 ID'] || raw['本地小区ID'] || raw['本地小区 ID'] || raw['cellId'] || raw['CellId'];
-    
-    // 如果没有，再去尝试匹配 CellID / Cell ID，但过滤掉大于 65535 的大ID
-    if (cellIdVal === undefined || cellIdVal === null || cellIdVal === '') {
-        const cid = raw['CellID'] || raw['Cell ID'];
-        if (cid !== undefined && cid !== null && cid !== '') {
-            const numCid = parseInt(String(cid), 10);
-            if (!isNaN(numCid) && numCid < 65536) {
-                cellIdVal = cid;
+    // 辅助函数：不区分大小写和空格匹配 key
+    const getValueIgnoreCaseAndSpace = (keys: string[]): any => {
+        // 先完全匹配
+        for (const k of keys) {
+            if (raw[k] !== undefined && raw[k] !== null && raw[k] !== '') {
+                return raw[k];
+            }
+        }
+        // 再模糊匹配
+        const normalizedKeys = keys.map(k => k.toLowerCase().replace(/[\s\-_]/g, ''));
+        for (const rawKey of Object.keys(raw)) {
+            const normRawKey = rawKey.toLowerCase().replace(/[\s\-_]/g, '');
+            if (normalizedKeys.includes(normRawKey)) {
+                if (raw[rawKey] !== undefined && raw[rawKey] !== null && raw[rawKey] !== '') {
+                    return raw[rawKey];
+                }
+            }
+        }
+        return undefined;
+    };
+
+    // 1. 获取基站ID
+    const enodebKeys = [
+        'eNodeBId', 'eNodeBID', 'EnodeBId', 'EnodeBID', 'enodebId', 'enodebid', 'eNodeB_ID', 'EnodeB_ID',
+        'gNodeBId', 'gNodeBID', 'gnodebId', 'gnodebid', 'gNBID', 'gNB ID', 'gNBId', 'gnbid',
+        '网元ID', '网元 ID', '基站ID', '基站 ID', '基站标识', '网元标识', '基站'
+    ];
+    const enodebVal = getValueIgnoreCaseAndSpace(enodebKeys);
+
+    // 2. 获取小区ID
+    const cellKeys = [
+        'cellId', 'cellID', 'CellId', 'CellID', 'cellid', 'cell_id', 'cell_ID',
+        '小区ID', '小区 ID', '本地小区ID', '本地小区 ID', '本地小区标识', '小区'
+    ];
+    const cellVal = getValueIgnoreCaseAndSpace(cellKeys);
+
+    // 3. 如果二者都存在，尝试通过 ne * 256 + cell 计算
+    if (enodebVal !== undefined && enodebVal !== null && enodebVal !== '' &&
+        cellVal !== undefined && cellVal !== null && cellVal !== '') {
+        const ne = parseInt(String(enodebVal), 10);
+        const cell = parseInt(String(cellVal), 10);
+        
+        if (!isNaN(ne) && !isNaN(cell)) {
+            // 物理小区ID cellId 必须小于 65536，否则如果它是大ID，则不适合乘以 256
+            if (cell < 65536) {
+                return String(ne * 256 + cell);
             }
         }
     }
 
-    // 2. 获取网元ID / 基站ID
-    const enodebIdVal = raw['网元ID'] || raw['网元 ID'] || raw['基站ID'] || raw['基站 ID'] || raw['eNodeB ID'] || raw['EnodeB ID'] || raw['gNodeB ID'] || raw['gNB ID'] || raw['基站标识'] || raw['EnodeBID'] || raw['gNodeBID'];
+    // 4. 兜底逻辑：如果无法通过基站和小区ID组合计算
+    // 优先寻找 CGI, ECGI, NCGI
+    const cgiKeys = ['CGI', 'ECGI', 'NCGI', 'cgi', 'ecgi', 'ncgi'];
+    const cgiVal = getValueIgnoreCaseAndSpace(cgiKeys);
+    if (cgiVal !== undefined && cgiVal !== null && cgiVal !== '') {
+        return String(cgiVal);
+    }
 
-    if (enodebIdVal !== undefined && enodebIdVal !== null && enodebIdVal !== '' &&
-        cellIdVal !== undefined && cellIdVal !== null && cellIdVal !== '') {
-        const ne = parseInt(String(enodebIdVal), 10);
-        const cell = parseInt(String(cellIdVal), 10);
-        if (!isNaN(ne) && !isNaN(cell)) {
-            return String(ne * 256 + cell);
+    // 再次，如果小区ID本身是个大ID（>= 65536），直接作为唯一标识
+    if (cellVal !== undefined && cellVal !== null && cellVal !== '') {
+        const cell = parseInt(String(cellVal), 10);
+        if (!isNaN(cell) && cell >= 65536) {
+            return String(cellVal);
         }
     }
 
-    // 3. 兜底逻辑：若无法采用 ne*256+cell，则寻找大ID列本身
-    let cgiVal = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['cgi'];
-    if (cgiVal) return String(cgiVal);
-
-    const cid = raw['CellID'] || raw['Cell ID'];
-    if (cid !== undefined && cid !== null && cid !== '') {
-        const numCid = parseInt(String(cid), 10);
-        if (!isNaN(numCid) && numCid >= 65536) {
-            return String(cid);
-        }
-    }
-
-    return String(cid || '0');
+    return String(cellVal || '0');
 }
 
 // --- Message Handler ---
