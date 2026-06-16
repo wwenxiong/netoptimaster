@@ -192,19 +192,47 @@ function decodeRawData(rawDataStr, headers) {
     }
 }
 
-// Calculate unique cell ID based on: 网元ID*256+cellId
+// Calculate unique cell ID based on: 网元ID*256+cellId (Robust version)
 function getUniqueCellId(raw) {
-    const enodebId = raw['网元ID'] || raw['网元 ID'] || raw['基站ID'] || raw['基站 ID'] || raw['eNodeB ID'] || raw['EnodeB ID'] || raw['gNodeB ID'] || raw['gNB ID'] || raw['基站标识'] || raw['EnodeBID'] || raw['gNodeBID'];
-    const cellId = raw['小区ID'] || raw['小区 ID'] || raw['CellID'] || raw['Cell ID'] || raw['cellId'] || raw['本地小区ID'] || raw['本地小区 ID'] || raw['CellId'];
+    // 1. 优先获取明确的小区ID（小数字，通常为0-255）
+    let cellIdVal = raw['小区ID'] || raw['小区 ID'] || raw['本地小区ID'] || raw['本地小区 ID'] || raw['cellId'] || raw['CellId'];
     
-    if (enodebId !== undefined && cellId !== undefined) {
-        const ne = parseInt(String(enodebId), 10);
-        const cell = parseInt(String(cellId), 10);
+    // 如果没有，再去尝试匹配 CellID / Cell ID，但过滤掉大于 65535 的大ID
+    if (cellIdVal === undefined || cellIdVal === null || cellIdVal === '') {
+        const cid = raw['CellID'] || raw['Cell ID'];
+        if (cid !== undefined && cid !== null && cid !== '') {
+            const numCid = parseInt(String(cid), 10);
+            if (!isNaN(numCid) && numCid < 65536) {
+                cellIdVal = cid;
+            }
+        }
+    }
+
+    // 2. 获取网元ID / 基站ID
+    const enodebIdVal = raw['网元ID'] || raw['网元 ID'] || raw['基站ID'] || raw['基站 ID'] || raw['eNodeB ID'] || raw['EnodeB ID'] || raw['gNodeB ID'] || raw['gNB ID'] || raw['基站标识'] || raw['EnodeBID'] || raw['gNodeBID'];
+
+    if (enodebIdVal !== undefined && enodebIdVal !== null && enodebIdVal !== '' &&
+        cellIdVal !== undefined && cellIdVal !== null && cellIdVal !== '') {
+        const ne = parseInt(String(enodebIdVal), 10);
+        const cell = parseInt(String(cellIdVal), 10);
         if (!isNaN(ne) && !isNaN(cell)) {
             return String(ne * 256 + cell);
         }
     }
-    return String(raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['cgi'] || '0');
+
+    // 3. 兜底逻辑：若无法采用 ne*256+cell，则寻找大ID列本身
+    let cgiVal = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['cgi'];
+    if (cgiVal) return String(cgiVal);
+
+    const cid = raw['CellID'] || raw['Cell ID'];
+    if (cid !== undefined && cid !== null && cid !== '') {
+        const numCid = parseInt(String(cid), 10);
+        if (!isNaN(numCid) && numCid >= 65536) {
+            return String(cid);
+        }
+    }
+
+    return String(cid || '0');
 }
 
 function getHeaders(networkType, granularity) {
@@ -1352,8 +1380,7 @@ function handleRequest(action, payload, sendProgress) {
             rowsLatest.forEach(row => {
                 const raw = decodeRawData(row.rawData, headers);
                 const key = getUniqueCellId(raw);
-                const cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
-                cellsLatest.set(key, { cellName: row.cellName, cgi: String(cgi) });
+                cellsLatest.set(key, { cellName: row.cellName, cgi: key });
             });
 
             const added = [];
@@ -1365,8 +1392,7 @@ function handleRequest(action, payload, sendProgress) {
                 rowsPrev.forEach(row => {
                     const raw = decodeRawData(row.rawData, headers);
                     const key = getUniqueCellId(raw);
-                    const cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
-                    cellsPrev.set(key, { cellName: row.cellName, cgi: String(cgi) });
+                    cellsPrev.set(key, { cellName: row.cellName, cgi: key });
                 });
 
                 cellsLatest.forEach((val, key) => {
