@@ -974,7 +974,8 @@ self.onmessage = async function (e: MessageEvent) {
                             const raw = filterRowByFixedHeaders(rawOriginal, networkType);
 
                             let cellName = raw['CellName'] || raw['小区名称'] || raw['小区名'] || raw['Cell Name'] || 'Unknown';
-                            let cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
+                            // ★ 使用 getUniqueCellId 通过 eNodeBId*256+cellId 计算唯一小区标识
+                            let cgi = getUniqueCellId(raw);
                             let rawTime = raw['StartTime'] || raw['开始时间'] || raw['Time'] || raw['时间'];
 
                             if (!rawTime && cellName === 'Unknown') continue;
