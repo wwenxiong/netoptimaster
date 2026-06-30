@@ -1121,6 +1121,18 @@ self.onmessage = async function (e: MessageEvent) {
                 break;
             }
 
+            case 'CLEAR_IMPORT_HISTORY': {
+                if (!db) throw new Error("DB not initialized");
+                const { networkType } = payload;
+                if (networkType === 'ALL') {
+                    db.run("DELETE FROM import_history;");
+                } else {
+                    db.run("DELETE FROM import_history WHERE networkType = ?;", [networkType]);
+                }
+                self.postMessage({ id, status: 'success' });
+                break;
+            }
+
             case 'GET_IMPORT_HISTORY': {
                 if (!db) {
                     self.postMessage({ id, status: 'success', data: [] });

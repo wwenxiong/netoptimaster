@@ -245,6 +245,32 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
       }
   };
 
+  // 清空导入历史逻辑
+  const handleClearHistory = async () => {
+      const label = cleanupNetType === 'ALL' ? '所有网络制式' : cleanupNetType;
+      const confirmMsg = `⚠️ 警告：您即将清空 [${label}] 的数据导入历史记录！\n清空后，系统将允许您重新导入曾经导入过的同名文件。\n（此操作不会删除已存在的 KPI 指标数据，确认执行吗？）`;
+      if (!window.confirm(confirmMsg)) return;
+
+      setLoading(true);
+      setProgress(0);
+      addLog(`[清空历史] 开始清理 [${label}] 的导入历史记录...`);
+
+      try {
+          await dbService.clearImportHistory(cleanupNetType);
+          setProgress(50);
+          addLog(`[清空历史] 🧹 成功清空 [${label}] 的导入历史记录。`);
+          addLog("[清空历史] 正在同步数据到磁盘...");
+          await dbService.saveToLocalFileHandle();
+          setProgress(100);
+          addLog("✅ [清空历史] 导入历史清空与磁盘同步成功完成！");
+      } catch (e: any) {
+          addLog(`❌ [清空历史] 失败: ${e.message}`);
+      } finally {
+          setLoading(false);
+          await refreshStatus();
+      }
+  };
+
   // 自动根据文件名特征识别制式和粒度
   const autoDetectFileType = (filename: string): { networkType: NetworkType, granularity: string } => {
       const lowerName = filename.toLowerCase();
@@ -747,13 +773,21 @@ export const ImportPanel: React.FC<ImportPanelProps> = ({ onFileChange }) => {
               </div>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 flex gap-2 flex-wrap">
               <button 
                   onClick={handleManualCleanup}
                   disabled={loading || !cleanupStartDate || !cleanupEndDate}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1 shadow-sm shadow-red-100"
               >
                   <Trash2 className="w-3.5 h-3.5" /> 立即清理选定区间数据
+              </button>
+
+              <button 
+                  onClick={handleClearHistory}
+                  disabled={loading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1 shadow-sm shadow-amber-100"
+              >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> 重置数据导入历史记录
               </button>
           </div>
       </div>

@@ -1,6 +1,6 @@
 {
-  "version": "1.0.13",
-  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.13/NetOptiMaster.Setup.1.0.13.exe",
-  "notes": "1. 修复由于 CGI 获取逻辑缺陷导致同一基站下不同小区 CGI 冲突、数据导入缺失的严重 BUG。",
-  "pubDate": "2026-06-30T08:15:00.000Z"
+  "version": "1.0.14",
+  "url": "https://github.com/wwenxiong/netoptimaster/releases/download/v1.0.14/NetOptiMaster.Setup.1.0.14.exe",
+  "notes": "1. 增加“重置数据导入历史记录”功能，用户可随时清空已导入文件的历史缓存，从而重新导入发生过变更的同名数据文件。\n2. 修复数据导入时小区 CGI 的计算冲突问题，确保同一基站下的所有小区均能完整且唯一地识别和导入。",
+  "pubDate": "2026-06-30T08:25:00.000Z"
 }

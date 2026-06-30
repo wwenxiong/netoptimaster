@@ -492,6 +492,10 @@ class DBService {
       return this.postToWorker('DELETE_BY_DATE_RANGE', { startDate, endDate, networkType });
   }
 
+  async clearImportHistory(networkType: string): Promise<void> {
+      await this.postToWorker('CLEAR_IMPORT_HISTORY', { networkType });
+  }
+
   async getImportHistory(): Promise<any[]> {
       return this.postToWorker('GET_IMPORT_HISTORY');
   }

@@ -1544,6 +1544,16 @@ function handleRequest(action, payload, sendProgress) {
             return { deletedCount };
         }
 
+        case 'CLEAR_IMPORT_HISTORY': {
+            const { networkType } = payload;
+            if (networkType === 'ALL') {
+                db.prepare("DELETE FROM import_history").run();
+            } else {
+                db.prepare("DELETE FROM import_history WHERE networkType = ?").run(networkType);
+            }
+            return { status: 'success' };
+        }
+
         case 'VACUUM_DB': {
             db.exec("VACUUM;");
             return { status: 'success' };
