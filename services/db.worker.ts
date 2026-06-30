@@ -16,6 +16,88 @@ self.addEventListener('unhandledrejection', (e: any) => {
 let db: Database | null = null;
 let SQL: SqlJsStatic | null = null;
 let wasmUrl: string = '';
+// ============ 固定表头定义 (4G) ============
+// 不管原始数据有多少列，导入时只识别并保留这些列
+const FIXED_HEADERS_4G: string[] = [
+    '开始时间',
+    '粒度',
+    '子网ID',
+    '子网名称',
+    '网元ID',
+    '管理网元',
+    '小区名称',
+    'eNodeBId',
+    'cellId',
+    '小区的可用率(%)',
+    '空口4G业务量(上行+下行)GB-重庆',
+    '空口上行业务量(GB)-重庆',
+    '空口下行业务量(GB)-重庆',
+    'VOLTE话务量(Erl)-重庆',
+    '上行信道PRB资源利用率(%)',
+    '下行信道PRB资源利用率(%)',
+    '最大的RRC连接建立个数',
+    '载波平均噪声干扰(dBm)',
+    '小区平均RSSI(dBm)',
+    '无线接通率(%)-重庆',
+    '无线掉线率(%)',
+    'VOLTE无线接通率-重庆',
+    'VOLTE无线掉话率-重庆',
+    '切换出成功率(%)',
+    '系统内切换入成功率(%)',
+    'TA平均接入距离-重庆',
+    '上行丢包率(QCI=1)-重庆',
+    '下行丢包率(QCI=1)-重庆',
+    '上行丢包率(QCI=2)-重庆',
+    '下行丢包率(QCI=2)-重庆',
+    '上行丢包率(QCI=5)-重庆',
+    '下行丢包率(QCI=5)-重庆',
+    'RRC建立请求数目',
+    'RRC建立成功数目',
+    'RRC建立失败数目',
+    'E-RAB建立成功率-重庆',
+    'E-RAB建立成功数目',
+    'E-RAB建立请求数目',
+    'E-RAB建立失败数目',
+    '服务小区RSRP良好覆盖率(≥-110)-重庆',
+    'CQI优良率-重庆',
+];
+
+// 归一化函数：去除空格、下划线、横杠，转小写，用于模糊匹配列名
+function normalizeHeaderKey(key: string): string {
+    return key.toLowerCase().replace(/[\s\-_]/g, '');
+}
+
+// 预计算固定表头的归一化映射 { normalizedKey -> originalFixedHeader }
+const FIXED_HEADERS_4G_MAP: Map<string, string> = new Map();
+for (const h of FIXED_HEADERS_4G) {
+    FIXED_HEADERS_4G_MAP.set(normalizeHeaderKey(h), h);
+}
+
+/**
+ * 将原始CSV行数据过滤为只包含固定表头中的列。
+ * 对列名进行归一化匹配，以兼容原始数据中列名的空格/大小写差异。
+ * @param raw 原始行数据对象
+ * @param networkType 网络类型
+ * @returns 过滤后的行数据对象（使用固定表头中的标准列名作为key）
+ */
+function filterRowByFixedHeaders(raw: Record<string, any>, networkType: string): Record<string, any> {
+    // 目前只对 4G 类型做固定表头过滤
+    if (networkType !== '4G') {
+        return raw;
+    }
+
+    const filtered: Record<string, any> = {};
+    for (const rawKey of Object.keys(raw)) {
+        const normKey = normalizeHeaderKey(rawKey);
+        const fixedHeader = FIXED_HEADERS_4G_MAP.get(normKey);
+        if (fixedHeader) {
+            // 使用固定表头的标准名称作为key
+            filtered[fixedHeader] = raw[rawKey];
+        }
+    }
+    return filtered;
+}
+
 // Helper: Parse metric value strings, stripping percents and thousands commas safely
 function parseNumericString(val: any): number {
     if (typeof val === 'number') return val;
@@ -887,7 +969,10 @@ self.onmessage = async function (e: MessageEvent) {
 
                     db!.run("BEGIN TRANSACTION");
                     try {
-                        for (const raw of rowBuffer) {
+                        for (const rawOriginal of rowBuffer) {
+                            // ★ 固定表头过滤：只保留定义的列，丢弃多余列
+                            const raw = filterRowByFixedHeaders(rawOriginal, networkType);
+
                             let cellName = raw['CellName'] || raw['小区名称'] || raw['小区名'] || raw['Cell Name'] || 'Unknown';
                             let cgi = raw['CGI'] || raw['ECGI'] || raw['NCGI'] || raw['CellID'] || raw['网元ID'] || raw['子网ID'] || '0';
                             let rawTime = raw['StartTime'] || raw['开始时间'] || raw['Time'] || raw['时间'];
