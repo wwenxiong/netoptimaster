@@ -486,12 +486,7 @@ function importFile(filePath, networkType, sendProgress, customFileName) {
             rowBuffer = [];
         };
 
-        const fileStream = fs.createReadStream(filePath);
-        let bytesRead = 0;
-
-        fileStream.on('data', (chunk) => {
-            bytesRead += chunk.length;
-        });
+        const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
 
         Papa.parse(fileStream, {
             header: true,
@@ -503,10 +498,12 @@ function importFile(filePath, networkType, sendProgress, customFileName) {
                 }
                 if (rowBuffer.length >= BATCH_SIZE) {
                     flushBuffer();
-                    const pct = Math.round((bytesRead / fileSize) * 100);
-                    if (pct > lastProgress) {
-                        sendProgress(pct, `正在解析并插入数据，已入库: ${processedCount} 行`);
-                        lastProgress = pct;
+                    if (results.meta && results.meta.cursor) {
+                        const pct = Math.round((results.meta.cursor / fileSize) * 100);
+                        if (pct > lastProgress) {
+                            sendProgress(pct, `正在解析并插入数据，已入库: ${processedCount} 行`);
+                            lastProgress = pct;
+                        }
                     }
                 }
             },
